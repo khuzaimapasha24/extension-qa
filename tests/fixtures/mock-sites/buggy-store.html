@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="">
+<head>
+  <meta charset="UTF-8">
+  <title>Store</title>
+  <!-- Intentionally missing meta name="description" -->
+  <!-- Intentionally missing meta viewport -->
+</head>
+<body>
+  <header>
+    <h1>Welcome to Buggy Store</h1>
+    <!-- Intentional second h1 for SEO audit failure -->
+    <h1>Special Summer Discounts</h1>
+    <nav>
+      <a href="/products">Products</a>
+      <a href="/about">About Us</a>
+      <!-- Intentional broken links -->
+      <a href="#">Dead Anchor</a>
+      <a href="javascript:void(0)">Bad Script Link</a>
+      <a href="">Empty Link</a>
+      <!-- Ambiguous link text for a11y audit failure -->
+      <a href="/terms">Click here</a>
+      <!-- External link -->
+      <a href="https://example.org/docs">External Help</a>
+    </nav>
+  </header>
+
+  <main>
+    <section id="hero">
+      <!-- Intentional missing alt text -->
+      <img src="https://example.com/banner-broken.jpg">
+      <!-- Image with valid alt -->
+      <img src="https://example.com/logo.png" alt="Buggy Store Official Logo" width="120" height="40">
+    </section>
+
+    <section id="actions">
+      <!-- Unlabelled icon button -->
+      <button id="icon-search-btn" type="button">
+        <svg width="16" height="16"><circle cx="8" cy="8" r="7"/></svg>
+      </button>
+
+      <!-- Standard safe button -->
+      <button id="add-cart-btn" type="button">Add to Shopping Cart</button>
+
+      <!-- High risk action button -->
+      <button id="delete-account-btn" type="button" class="btn-danger">Delete User Account</button>
+    </section>
+
+    <section id="contact">
+      <!-- Form missing submit button -->
+      <form id="newsletter-form" action="/subscribe" method="POST">
+        <label for="newsletter-email">Subscribe to Newsletter</label>
+        <input id="newsletter-email" type="email" name="email" placeholder="you@example.com">
+      </form>
+
+      <!-- Form with unlabelled required input and submit button -->
+      <form id="checkout-form" action="/checkout" method="POST">
+        <input id="unlabelled-coupon" type="text" name="coupon" required>
+        <button id="submit-checkout" type="submit">Complete Checkout</button>
+      </form>
+    </section>
+  </main>
+
+  <footer>
+    <p>&copy; 2026 Buggy Store, Inc.</p>
+  </footer>
+</body>
+</html>
