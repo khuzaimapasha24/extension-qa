@@ -30,8 +30,20 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
+      "js": ["src/content/injected-interceptor.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["<all_urls>"],
       "js": ["src/content/index.js"],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["src/content/injected-interceptor.js"],
+      "matches": ["<all_urls>"]
     }
   ],
   "icons": {

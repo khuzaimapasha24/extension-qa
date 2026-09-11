@@ -103,4 +103,18 @@ describe('RuntimeRecorders', () => {
       expect(recorder.getCapturedFailures()).toHaveLength(0);
     });
   });
+
+  describe('InjectedInterceptor CSP Safety', () => {
+    it('injectInterceptorIntoPage does not append script elements to DOM (adheres strictly to CSP)', async () => {
+      const { injectInterceptorIntoPage } = await import('../../src/content/injected-interceptor');
+      const appendChildSpy = vi.spyOn(document.head, 'appendChild');
+
+      injectInterceptorIntoPage();
+
+      expect(appendChildSpy).not.toHaveBeenCalled();
+      const scripts = document.head.querySelectorAll('script');
+      expect(scripts.length).toBe(0);
+      expect((window as any).__AI_QA_INTERCEPTOR_ACTIVE__).toBe(true);
+    });
+  });
 });

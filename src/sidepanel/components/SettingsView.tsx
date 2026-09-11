@@ -65,12 +65,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   const handleTestKey = async (provider: 'gemini' | 'openai' | 'anthropic') => {
-    const key =
+    const rawKey =
       provider === 'gemini'
         ? aiConfig.geminiApiKey
         : provider === 'openai'
         ? aiConfig.openaiApiKey
         : aiConfig.anthropicApiKey;
+    const key = (rawKey || '').trim();
     const model =
       provider === 'gemini'
         ? aiConfig.geminiModel
@@ -227,7 +228,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontSize: '11px', fontWeight: 600, color: '#38bdf8' }}>Google Gemini</span>
                 <select
-                  value={aiConfig.geminiModel || 'gemini-3.6-flash'}
+                  value={aiConfig.geminiModel || 'gemini-2.5-flash'}
                   onChange={(e) => updateAiConfig({ geminiModel: e.target.value })}
                   style={{
                     fontSize: '10px',
@@ -239,9 +240,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     maxWidth: '180px',
                   }}
                 >
-                  <option value="gemini-3.6-flash">Gemini 3.6 Flash (Fast)</option>
+                  <option value="gemini-2.5-flash">Gemini 2.5 Flash (Recommended)</option>
+                  <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                  <option value="gemini-1.5-flash">Gemini 1.5 Flash (Fast)</option>
+                  <option value="gemini-1.5-pro">Gemini 1.5 Pro (Deep)</option>
                   <option value="gemini-flash-latest">Gemini Flash (Auto)</option>
-                  <option value="gemini-2.5-pro">Gemini 2.5 Pro (Deep)</option>
+                  <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
                   <option value="gemini-pro-latest">Gemini Pro (Auto)</option>
                 </select>
               </div>
@@ -249,7 +253,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
                   <input
                     type={showKeys.gemini ? 'text' : 'password'}
-                    placeholder="AIzaSy..."
+                    placeholder="AIzaSy... or AQ...."
                     value={aiConfig.geminiApiKey || ''}
                     onChange={(e) => updateAiConfig({ geminiApiKey: e.target.value })}
                     className="settings-input"

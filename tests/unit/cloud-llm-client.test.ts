@@ -169,6 +169,67 @@ describe('CloudLLMClient', () => {
       expect(res.success).toBe(false);
       expect(res.message).toContain('401');
     });
+
+    it('sends x-goog-api-key header for AQ. and AIza format keys', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          candidates: [{ content: { parts: [{ text: 'OK' }] } }],
+        }),
+      });
+      global.fetch = mockFetch;
+
+      const aqKey = 'AQ.Ab8RN6I-NGmKhXNTc2PcMu2thqA-ZE0SxNgnc2LpE1HAcgLxbQ';
+      const res = await client.testApiKey('gemini', `  "${aqKey}"  `);
+      expect(res.success).toBe(true);
+
+      expect(mockFetch).toHaveBeenCalled();
+      const lastCall = mockFetch.mock.calls[0];
+      const headers = lastCall[1].headers;
+      expect(headers['x-goog-api-key']).toBe(aqKey);
+      expect(headers['Authorization']).toBeUndefined();
+    });
+
+    it('sends Authorization Bearer header for Google OAuth ya29. tokens', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          candidates: [{ content: { parts: [{ text: 'OK' }] } }],
+        }),
+      });
+      global.fetch = mockFetch;
+
+      const oauthToken = 'ya29.a0AfH6SM...test';
+      const res = await client.testApiKey('gemini', `Bearer ${oauthToken}`);
+      expect(res.success).toBe(true);
+
+      expect(mockFetch).toHaveBeenCalled();
+      const lastCall = mockFetch.mock.calls[0];
+      const headers = lastCall[1].headers;
+      expect(headers['Authorization']).toBe(`Bearer ${oauthToken}`);
+      expect(headers['x-goog-api-key']).toBeUndefined();
+      expect(lastCall[0]).not.toContain('?key=');
+    });
+
+    it('formats user-friendly error when ACCESS_TOKEN_TYPE_UNSUPPORTED is returned', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        text: async () => JSON.stringify({
+          error: {
+            code: 401,
+            message: 'Request had invalid authentication credentials. Expected OAuth 2 access token',
+            status: 'UNAUTHENTICATED',
+            details: [{ reason: 'ACCESS_TOKEN_TYPE_UNSUPPORTED' }],
+          },
+        }),
+      });
+
+      const res = await client.testApiKey('gemini', 'AQ.invalidKey');
+      expect(res.success).toBe(false);
+      expect(res.message).toContain('Gemini authentication error');
+      expect(res.message).toContain('ACCESS_TOKEN_TYPE_UNSUPPORTED');
+    });
   });
 
   describe('generateCompletion', () => {

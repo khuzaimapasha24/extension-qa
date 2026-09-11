@@ -92,27 +92,68 @@ export class CloudLLMClient {
   }
 
   /**
-   * Dispatches a prompt to Google Gemini's REST API with automated fallback across available 2026 models.
+   * Cleans and sanitizes API keys by stripping leading/trailing whitespace,
+   * accidental surrounding quotes, and extraneous Bearer prefixes.
+   */
+  public sanitizeApiKey(key: string): string {
+    let cleaned = (key || '').trim();
+    if (
+      (cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+      (cleaned.startsWith("'") && cleaned.endsWith("'"))
+    ) {
+      cleaned = cleaned.slice(1, -1).trim();
+    }
+    if (cleaned.startsWith('Bearer ')) {
+      cleaned = cleaned.slice(7).trim();
+    }
+    return cleaned;
+  }
+
+  /**
+   * Dispatches a prompt to Google Gemini's REST API with automated fallback across available models.
+   * Sends the official x-goog-api-key header to ensure compatibility with newer AQ. keys,
+   * and handles OAuth access tokens (ya29.) with Authorization Bearer.
    */
   public async callGemini(
     prompt: string,
     apiKey: string,
-    model = 'gemini-3.6-flash',
+    model = 'gemini-2.5-flash',
     temperature = 0.1,
     maxTokens = 800
   ): Promise<string> {
+    const cleanedKey = this.sanitizeApiKey(apiKey);
     const candidateModels = [model];
-    if (!candidateModels.includes('gemini-3.6-flash')) candidateModels.push('gemini-3.6-flash');
-    if (!candidateModels.includes('gemini-flash-latest')) candidateModels.push('gemini-flash-latest');
+    for (const m of [
+      'gemini-2.5-flash',
+      'gemini-2.0-flash',
+      'gemini-1.5-flash',
+      'gemini-flash-latest',
+      'gemini-3.6-flash',
+    ]) {
+      if (!candidateModels.includes(m)) candidateModels.push(m);
+    }
 
     let lastError: Error | null = null;
     for (const currentModel of candidateModels) {
       try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(currentModel)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        let url: string;
+
+        if (cleanedKey.startsWith('ya29.')) {
+          // Google OAuth 2.0 access token
+          headers['Authorization'] = `Bearer ${cleanedKey}`;
+          url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(currentModel)}:generateContent`;
+        } else {
+          // Google AI Studio API key (AIza... or AQ....)
+          headers['x-goog-api-key'] = cleanedKey;
+          url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(currentModel)}:generateContent?key=${encodeURIComponent(cleanedKey)}`;
+        }
 
         const response = await fetch(url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
@@ -124,8 +165,9 @@ export class CloudLLMClient {
 
         if (!response.ok) {
           const errText = await response.text();
-          if (response.status === 404 && candidateModels.indexOf(currentModel) < candidateModels.length - 1) {
-            logger.warn(`Gemini model ${currentModel} returned 404, falling back to next available model...`);
+          const isModelNotFound = response.status === 404 || (response.status === 400 && /model/i.test(errText));
+          if (isModelNotFound && candidateModels.indexOf(currentModel) < candidateModels.length - 1) {
+            logger.warn(`Gemini model ${currentModel} returned ${response.status}, falling back to next available model...`);
             lastError = new Error(`Gemini API error (${response.status}): ${errText}`);
             continue;
           }
@@ -171,11 +213,12 @@ export class CloudLLMClient {
   ): Promise<string> {
     const url = 'https://api.openai.com/v1/chat/completions';
 
+    const cleanedKey = this.sanitizeApiKey(apiKey);
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey.trim()}`,
+        Authorization: `Bearer ${cleanedKey}`,
       },
       body: JSON.stringify({
         model,
@@ -210,11 +253,12 @@ export class CloudLLMClient {
   ): Promise<string> {
     const url = 'https://api.anthropic.com/v1/messages';
 
+    const cleanedKey = this.sanitizeApiKey(apiKey);
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey.trim(),
+        'x-api-key': cleanedKey,
         'anthropic-version': '2023-06-01',
         'dangerously-allow-browser': 'true',
       },
@@ -285,23 +329,42 @@ export class CloudLLMClient {
     prompt: string,
     imageInput: string,
     apiKey: string,
-    model = 'gemini-3.6-flash',
+    model = 'gemini-2.5-flash',
     temperature = 0.1,
     maxTokens = 800
   ): Promise<string> {
+    const cleanedKey = this.sanitizeApiKey(apiKey);
     const { mimeType, base64Raw } = this.parseBase64Image(imageInput);
     const candidateModels = [model];
-    if (!candidateModels.includes('gemini-3.6-flash')) candidateModels.push('gemini-3.6-flash');
-    if (!candidateModels.includes('gemini-flash-latest')) candidateModels.push('gemini-flash-latest');
+    for (const m of [
+      'gemini-2.5-flash',
+      'gemini-2.0-flash',
+      'gemini-1.5-flash',
+      'gemini-flash-latest',
+      'gemini-3.6-flash',
+    ]) {
+      if (!candidateModels.includes(m)) candidateModels.push(m);
+    }
 
     let lastError: Error | null = null;
     for (const currentModel of candidateModels) {
       try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(currentModel)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        let url: string;
+
+        if (cleanedKey.startsWith('ya29.')) {
+          headers['Authorization'] = `Bearer ${cleanedKey}`;
+          url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(currentModel)}:generateContent`;
+        } else {
+          headers['x-goog-api-key'] = cleanedKey;
+          url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(currentModel)}:generateContent?key=${encodeURIComponent(cleanedKey)}`;
+        }
 
         const response = await fetch(url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({
             contents: [
               {
@@ -325,7 +388,8 @@ export class CloudLLMClient {
 
         if (!response.ok) {
           const errText = await response.text();
-          if (response.status === 404 && candidateModels.indexOf(currentModel) < candidateModels.length - 1) {
+          const isModelNotFound = response.status === 404 || (response.status === 400 && /model/i.test(errText));
+          if (isModelNotFound && candidateModels.indexOf(currentModel) < candidateModels.length - 1) {
             lastError = new Error(`Gemini Vision API error (${response.status}): ${errText}`);
             continue;
           }
@@ -367,6 +431,7 @@ export class CloudLLMClient {
     temperature = 0.1,
     maxTokens = 800
   ): Promise<string> {
+    const cleanedKey = this.sanitizeApiKey(apiKey);
     const { dataUrl } = this.parseBase64Image(imageInput);
     const url = 'https://api.openai.com/v1/chat/completions';
 
@@ -374,7 +439,7 @@ export class CloudLLMClient {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey.trim()}`,
+        Authorization: `Bearer ${cleanedKey}`,
       },
       body: JSON.stringify({
         model,
@@ -420,6 +485,7 @@ export class CloudLLMClient {
     temperature = 0.1,
     maxTokens = 800
   ): Promise<string> {
+    const cleanedKey = this.sanitizeApiKey(apiKey);
     const { mimeType, base64Raw } = this.parseBase64Image(imageInput);
     const url = 'https://api.anthropic.com/v1/messages';
 
@@ -427,7 +493,7 @@ export class CloudLLMClient {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey.trim(),
+        'x-api-key': cleanedKey,
         'anthropic-version': '2023-06-01',
         'dangerously-allow-browser': 'true',
       },
@@ -529,7 +595,7 @@ export class CloudLLMClient {
     apiKey: string,
     model?: string
   ): Promise<TestKeyResult> {
-    const trimmedKey = apiKey.trim();
+    const trimmedKey = this.sanitizeApiKey(apiKey);
     if (!trimmedKey) {
       return { success: false, message: 'API key cannot be empty' };
     }
@@ -540,7 +606,7 @@ export class CloudLLMClient {
     try {
       let result = '';
       if (provider === 'gemini') {
-        result = await this.callGemini(testPrompt, trimmedKey, model || 'gemini-3.6-flash', 0.1, 200);
+        result = await this.callGemini(testPrompt, trimmedKey, model || 'gemini-2.5-flash', 0.1, 200);
       } else if (provider === 'openai') {
         result = await this.callOpenAI(testPrompt, trimmedKey, model || 'gpt-4o-mini', 0.1, 50);
       } else if (provider === 'anthropic') {
@@ -558,7 +624,10 @@ export class CloudLLMClient {
         message: `Connected successfully to ${model || provider} (${latencyMs}ms)`,
       };
     } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
+      let errMsg = err instanceof Error ? err.message : String(err);
+      if (errMsg.includes('ACCESS_TOKEN_TYPE_UNSUPPORTED') || errMsg.includes('UNAUTHENTICATED')) {
+        errMsg = `Gemini authentication error: Invalid credentials. Please verify your Google AI Studio API key (starts with AIzaSy... or AQ....). (${errMsg})`;
+      }
       logger.warn(`API Key test failed for ${provider}: ${errMsg}`);
       return {
         success: false,

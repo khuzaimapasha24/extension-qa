@@ -6,7 +6,7 @@
   "description": "Production-grade Autonomous AI Website QA Agent Chrome Extension",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && vite build --config vite.content.config.ts",
+    "build": "vite build && vite build --config vite.content.config.ts && vite build --config vite.interceptor.config.ts",
     "package": "node scripts/package-extension.js",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",

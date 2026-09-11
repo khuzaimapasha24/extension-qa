@@ -18,20 +18,15 @@ export interface HttpTransaction {
 }
 
 /**
- * Injects the interceptor script directly into the page's execution context.
+ * Safely initializes the in-page interceptor in the current execution context.
+ * Does not create or append inline <script> elements to the DOM to strictly comply
+ * with host website Content Security Policy (CSP) directives (such as on drive.google.com, github.com, etc.).
+ * In Chrome extensions, the main-world interceptor is loaded directly via manifest.json with "world": "MAIN".
  */
 export function injectInterceptorIntoPage(): void {
-  try {
-    if (typeof document === 'undefined') return;
-    const script = document.createElement('script');
-    script.setAttribute('type', 'text/javascript');
-    script.textContent = `(${initializeInPageInterceptor.toString()})();`;
-    (document.head || document.documentElement || document.body)?.appendChild(script);
-    script.remove();
-  } catch {
-    // Fallback if CSP blocks inline script
-    initializeInPageInterceptor();
-  }
+  if (typeof window === 'undefined') return;
+  if ((window as any).__AI_QA_INTERCEPTOR_ACTIVE__) return;
+  initializeInPageInterceptor();
 }
 
 /**
@@ -190,4 +185,9 @@ export function initializeInPageInterceptor(): void {
 
     return originalXhrSend.apply(this, [body] as any);
   };
+}
+
+// Automatically initialize when executed as a dedicated MAIN world script
+if (typeof window !== 'undefined') {
+  initializeInPageInterceptor();
 }

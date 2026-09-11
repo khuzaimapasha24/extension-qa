@@ -161,6 +161,7 @@ const requiredFiles = [
   'manifest.json',
   'src/background/service-worker.js',
   'src/content/index.js',
+  'src/content/injected-interceptor.js',
   'src/sidepanel/index.html',
   'src/popup/index.html',
   'icons/icon-16.png',

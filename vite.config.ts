@@ -11,6 +11,9 @@ function buildContentPlugin(): import('vite').Plugin {
       await build({
         configFile: resolve(__dirname, 'vite.content.config.ts'),
       });
+      await build({
+        configFile: resolve(__dirname, 'vite.interceptor.config.ts'),
+      });
     },
   };
 }

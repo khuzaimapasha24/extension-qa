@@ -20,8 +20,8 @@ export class SettingsStore {
         if (!aiConfig.geminiApiKey || !aiConfig.geminiApiKey.trim()) {
           aiConfig.geminiApiKey = DEFAULT_AI_CONFIG.geminiApiKey;
         }
-        if (!aiConfig.geminiModel || aiConfig.geminiModel === 'gemini-1.5-flash') {
-          aiConfig.geminiModel = 'gemini-3.6-flash';
+        if (!aiConfig.geminiModel) {
+          aiConfig.geminiModel = 'gemini-2.5-flash';
         }
         if (aiConfig.geminiApiKey && (!aiConfig.provider || aiConfig.provider === 'auto')) {
           aiConfig.provider = 'gemini';

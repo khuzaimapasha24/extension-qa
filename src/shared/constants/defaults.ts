@@ -11,7 +11,7 @@ export const DEFAULT_SUPABASE_CONFIG: SupabaseConfig = {
 export const DEFAULT_AI_CONFIG: AIConfig = {
   provider: 'gemini',
   geminiApiKey: 'AQ.Ab8RN6I-NGmKhXNTc2PcMu2thqA-ZE0SxNgnc2LpE1HAcgLxbQ',
-  geminiModel: 'gemini-3.6-flash',
+  geminiModel: 'gemini-2.5-flash',
   openaiApiKey: '',
   openaiModel: 'gpt-4o-mini',
   anthropicApiKey: '',
