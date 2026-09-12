@@ -22,7 +22,7 @@ import {
   Database,
 } from 'lucide-react';
 import { modelManager, ModelManagerStatus } from '../../ai/model-manager';
-import { DEFAULT_LIGHT_MODEL, DEFAULT_COMPAT_MODEL, DEFAULT_FULL_MODEL } from '../../ai/webgpu-detector';
+import { DEFAULT_LIGHT_MODEL, DEFAULT_COMPAT_MODEL, DEFAULT_FULL_MODEL, F16_FAST_MODEL } from '../../ai/webgpu-detector';
 import { DEFAULT_AI_CONFIG, DEFAULT_ADVANCED_CONFIG } from '../../shared/constants/defaults';
 import { sendToBackground } from '../../shared/messaging/bus';
 import { supabaseClient } from '../../cloud/supabase-client';
@@ -41,7 +41,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onClearStorage,
 }) => {
   const [modelStatus, setModelStatus] = useState<ModelManagerStatus>(modelManager.getStatus());
-  const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_LIGHT_MODEL);
+  const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_COMPAT_MODEL);
   const [isClearingCache, setIsClearingCache] = useState<boolean>(false);
   const [isTestingSupabase, setIsTestingSupabase] = useState<boolean>(false);
   const [supabaseTestResult, setSupabaseTestResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -115,13 +115,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   useEffect(() => {
-    modelManager.checkHardware().then(() => {
+    modelManager.checkHardware().then((hw) => {
       setModelStatus(modelManager.getStatus());
+      if (hw && hw.recommendedModelId) {
+        setSelectedModel(hw.recommendedModelId);
+      } else if (!hw?.hasShaderF16 && selectedModel.includes('f16')) {
+        setSelectedModel(DEFAULT_COMPAT_MODEL);
+      }
     });
   }, []);
 
   const handleLoadModel = async () => {
-    await modelManager.loadModel(selectedModel, (_pct, _text) => {
+    const modelToLoad =
+      modelStatus.hardwareReport?.hasShaderF16 !== true && selectedModel.includes('f16')
+        ? DEFAULT_COMPAT_MODEL
+        : selectedModel;
+    setSelectedModel(modelToLoad);
+    await modelManager.loadModel(modelToLoad, (_pct, _text) => {
       setModelStatus(modelManager.getStatus());
     });
     setModelStatus(modelManager.getStatus());
@@ -507,8 +517,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     className="settings-input"
                     style={{ flex: 1 }}
                   >
-                    <option value={DEFAULT_LIGHT_MODEL}>SmolLM2-360M (~376MB, Fast 4-bit)</option>
-                    <option value={DEFAULT_COMPAT_MODEL}>SmolLM2-360M (~580MB, Universal Compatibility)</option>
+                    <option value={DEFAULT_COMPAT_MODEL}>
+                      SmolLM2-360M (~580MB, Universal 32-bit) ★ Recommended
+                    </option>
+                    {modelStatus.hardwareReport?.hasShaderF16 ? (
+                      <option value={F16_FAST_MODEL}>
+                        SmolLM2-360M (~376MB, Fast 4-bit)
+                      </option>
+                    ) : null}
                     <option value={DEFAULT_FULL_MODEL}>Llama-3.2-1B (~800MB, Full Reasoning)</option>
                     <option value="SmolLM2-360M-Instruct-q0f32-MLC">SmolLM2-360M (~1.7GB, Unquantized)</option>
                   </select>

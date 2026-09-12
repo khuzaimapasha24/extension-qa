@@ -62,16 +62,33 @@ describe('ModelManager', () => {
     expect(mockEngineFactory).toHaveBeenCalled();
   });
 
+  it('proactively routes to universal compatibility model when hardware lacks shader-f16', async () => {
+    vi.spyOn(manager, 'checkHardware').mockResolvedValue({
+      supported: true,
+      tier: 'LIGHT_WEBGPU',
+      hasShaderF16: false,
+      recommendedModelId: 'SmolLM2-360M-Instruct-q4f32_1-MLC',
+      notes: 'OK',
+    });
+
+    const success = await manager.loadModel('SmolLM2-360M-Instruct-q4f16_1-MLC');
+    expect(success).toBe(true);
+    expect(manager.isReady()).toBe(true);
+    expect(manager.getStatus().currentModelId).toBe('SmolLM2-360M-Instruct-q4f32_1-MLC');
+    expect(mockEngineFactory).toHaveBeenCalledWith('SmolLM2-360M-Instruct-q4f32_1-MLC', expect.any(Object));
+  });
+
   it('falls back to universal compatibility model if initial model fails', async () => {
     vi.spyOn(manager, 'checkHardware').mockResolvedValue({
       supported: true,
       tier: 'LIGHT_WEBGPU',
+      hasShaderF16: true,
       recommendedModelId: 'SmolLM2-360M-Instruct-q4f16_1-MLC',
       notes: 'OK',
     });
 
     mockEngineFactory
-      .mockRejectedValueOnce(new Error('shader-f16 not supported on this device'))
+      .mockRejectedValueOnce(new Error('shader-f16 runtime error'))
       .mockResolvedValueOnce(mockEngine as MLCEngineInterface);
 
     const success = await manager.loadModel('SmolLM2-360M-Instruct-q4f16_1-MLC');

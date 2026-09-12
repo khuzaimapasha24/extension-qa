@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { WebGPUDetector, DEFAULT_LIGHT_MODEL, DEFAULT_FULL_MODEL } from '../../src/ai/webgpu-detector';
+import { WebGPUDetector, DEFAULT_LIGHT_MODEL, DEFAULT_COMPAT_MODEL, DEFAULT_FULL_MODEL } from '../../src/ai/webgpu-detector';
 
 describe('WebGPUDetector', () => {
   let detector: WebGPUDetector;
@@ -47,12 +47,13 @@ describe('WebGPUDetector', () => {
     expect(report.notes).toContain('GPU adapter unavailable');
   });
 
-  it('classifies as LIGHT_WEBGPU for modest buffer limits (< 1024MB)', async () => {
+  it('classifies as LIGHT_WEBGPU and selects DEFAULT_COMPAT_MODEL when shader-f16 is missing', async () => {
     Object.defineProperty(globalThis, 'navigator', {
       value: {
         gpu: {
           requestAdapter: vi.fn().mockResolvedValue({
             limits: { maxBufferSize: 512 * 1024 * 1024 }, // 512 MB
+            features: { has: vi.fn().mockReturnValue(false) },
           }),
         },
       },
@@ -63,6 +64,28 @@ describe('WebGPUDetector', () => {
     const report = await detector.detectWebGPU();
     expect(report.supported).toBe(true);
     expect(report.tier).toBe('LIGHT_WEBGPU');
+    expect(report.hasShaderF16).toBe(false);
+    expect(report.recommendedModelId).toBe(DEFAULT_COMPAT_MODEL);
+  });
+
+  it('classifies as LIGHT_WEBGPU and selects DEFAULT_LIGHT_MODEL when shader-f16 is supported', async () => {
+    Object.defineProperty(globalThis, 'navigator', {
+      value: {
+        gpu: {
+          requestAdapter: vi.fn().mockResolvedValue({
+            limits: { maxBufferSize: 512 * 1024 * 1024 }, // 512 MB
+            features: { has: vi.fn().mockImplementation((f: string) => f === 'shader-f16') },
+          }),
+        },
+      },
+      configurable: true,
+      writable: true,
+    });
+
+    const report = await detector.detectWebGPU();
+    expect(report.supported).toBe(true);
+    expect(report.tier).toBe('LIGHT_WEBGPU');
+    expect(report.hasShaderF16).toBe(true);
     expect(report.recommendedModelId).toBe(DEFAULT_LIGHT_MODEL);
   });
 

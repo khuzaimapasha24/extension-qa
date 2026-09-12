@@ -54,14 +54,9 @@ export class ModelManager {
    * Loads a quantized model into WebGPU VRAM.
    */
   public async loadModel(
-    modelId: string = DEFAULT_LIGHT_MODEL,
+    modelId?: string,
     onProgress?: (progress: number, text: string) => void
   ): Promise<boolean> {
-    if (this.isReady() && this.currentModelId === modelId) {
-      logger.info(`Model ${modelId} is already ready in VRAM.`);
-      return true;
-    }
-
     if (this.loadPromise) {
       return this.loadPromise;
     }
@@ -77,13 +72,32 @@ export class ModelManager {
           return false;
         }
 
+        const requestedModel = modelId || hw.recommendedModelId || DEFAULT_COMPAT_MODEL;
+
+        if (this.isReady() && this.currentModelId === requestedModel) {
+          logger.info(`Model ${requestedModel} is already ready in VRAM.`);
+          return true;
+        }
+
+        // Proactively route model selection if device does not support shader-f16
+        let targetModelId = requestedModel;
+        if (hw.hasShaderF16 !== true && targetModelId.includes('f16')) {
+          logger.info(`WebGPU device lacks shader-f16 extension. Proactively switching from ${targetModelId} to ${DEFAULT_COMPAT_MODEL}.`);
+          targetModelId = DEFAULT_COMPAT_MODEL;
+        }
+
+        if (this.isReady() && this.currentModelId === targetModelId) {
+          logger.info(`Model ${targetModelId} is already ready in VRAM.`);
+          return true;
+        }
+
         this.status = 'DOWNLOADING';
-        this.currentModelId = modelId;
+        this.currentModelId = targetModelId;
         this.progressPercent = 0;
-        this.progressText = `Preparing ${modelId}...`;
+        this.progressText = `Preparing ${targetModelId}...`;
         this.lastError = undefined;
 
-        logger.info(`Starting load for model: ${modelId}`);
+        logger.info(`Starting load for model: ${targetModelId}`);
 
         initProgressCallback = (report: InitProgressReport) => {
           const pct = Math.round(report.progress * 100);
@@ -95,23 +109,23 @@ export class ModelManager {
           logger.debug(`MLC Init: [${pct}%] ${this.progressText}`);
         };
 
-        this.engine = await this.engineFactory(modelId, {
+        this.engine = await this.engineFactory(targetModelId, {
           initProgressCallback,
         });
 
         this.status = 'READY';
         this.progressPercent = 100;
         this.progressText = 'Model loaded and ready for local inference';
-        logger.info(`Model ${modelId} loaded successfully into WebGPU.`);
+        logger.info(`Model ${targetModelId} loaded successfully into WebGPU.`);
         return true;
       } catch (err) {
         const primaryError = err instanceof Error ? err.message : String(err);
 
         // Automatic fallback to universal compatibility model if initial attempt failed
-        if (modelId !== DEFAULT_COMPAT_MODEL && (modelId.includes('SmolLM2') || modelId.includes('q0f32') || modelId.includes('q4f16'))) {
+        if (this.currentModelId !== DEFAULT_COMPAT_MODEL && ((this.currentModelId || '').includes('SmolLM2') || (this.currentModelId || '').includes('q0f32') || (this.currentModelId || '').includes('q4f16') || (this.currentModelId || '').includes('f16'))) {
           try {
-            logger.warn(`Model ${modelId} failed (${primaryError}). Retrying with universal compatibility model ${DEFAULT_COMPAT_MODEL}...`);
-            this.progressText = `Retrying with universal model ${DEFAULT_COMPAT_MODEL}...`;
+            logger.info(`Model ${this.currentModelId} encountered error (${primaryError}). Switching smoothly to universal compatibility model ${DEFAULT_COMPAT_MODEL}...`);
+            this.progressText = `Switching to universal model ${DEFAULT_COMPAT_MODEL}...`;
             this.currentModelId = DEFAULT_COMPAT_MODEL;
             this.engine = await this.engineFactory(DEFAULT_COMPAT_MODEL, {
               initProgressCallback,
@@ -130,7 +144,7 @@ export class ModelManager {
         this.status = 'ERROR';
         this.lastError = primaryError;
         this.engine = null;
-        logger.error(`Failed to load model ${modelId}: ${primaryError}`, err);
+        logger.error(`Failed to load model ${this.currentModelId || 'unknown'}: ${primaryError}`, err);
         return false;
       } finally {
         this.loadPromise = null;
