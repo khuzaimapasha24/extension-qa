@@ -172,7 +172,9 @@ export async function sendToTab<T extends MessageType>(
           // If receiving end does not exist and haven't retried yet, inject content script & retry
           if (
             !hasRetried &&
-            (errMsg.includes('Receiving end does not exist') || errMsg.includes('Could not establish connection'))
+            (errMsg.includes('Receiving end does not exist') ||
+              errMsg.includes('Could not establish connection') ||
+              errMsg.includes('message port closed'))
           ) {
             clearTimeout(timer);
             isResolved = true;

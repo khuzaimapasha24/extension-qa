@@ -103,7 +103,11 @@ export const App: React.FC = () => {
       .catch(() => {});
 
     // Listen to background broadcast updates
-    const messageListener = (msg: ExtensionMessage) => {
+    const messageListener = (
+      msg: ExtensionMessage,
+      _sender: chrome.runtime.MessageSender,
+      sendResponse?: (res?: unknown) => void
+    ) => {
       if (msg && msg.type === 'SESSION_STATE_UPDATED') {
         const payload = msg.payload as { session: QASession };
         if (payload?.session) {
@@ -120,7 +124,15 @@ export const App: React.FC = () => {
             })
             .catch(() => {});
         }
+        if (typeof sendResponse === 'function') {
+          try {
+            sendResponse({ acknowledged: true });
+          } catch {
+            // Port might be closed if sender had no response expectations
+          }
+        }
       }
+      return false;
     };
 
     if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {

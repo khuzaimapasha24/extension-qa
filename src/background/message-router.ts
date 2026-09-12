@@ -11,19 +11,44 @@ import { cloudLlmClient } from '../ai/cloud-llm-client';
 
 const logger = createLogger('MessageRouter');
 
+const BACKGROUND_HANDLED_MESSAGES = new Set<string>([
+  'PING',
+  'GET_ACTIVE_TAB_INFO',
+  'START_SESSION',
+  'STOP_SESSION',
+  'PAUSE_SESSION',
+  'RESUME_SESSION',
+  'GET_CURRENT_SESSION',
+  'GET_SETTINGS',
+  'UPDATE_SETTINGS',
+  'TEST_LLM_KEY',
+  'GET_DISCOVERY_MAP',
+  'GET_FLOW_ANALYSIS',
+  'FINDING_DETECTED',
+  'CAPTURE_SCREENSHOT',
+  'HIGHLIGHT_ELEMENT',
+  'CLEAR_HIGHLIGHTS',
+]);
+
 export function initMessageRouter() {
   // Listen for session state changes and broadcast them to runtime listeners
   sessionManager.addListener((session) => {
     try {
       if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
-        chrome.runtime.sendMessage({
-          type: 'SESSION_STATE_UPDATED',
-          payload: { session },
-          sender: 'background',
-          timestamp: Date.now(),
-        }).catch(() => {
-          // No active listener (e.g. side panel not open), ignore
-        });
+        chrome.runtime.sendMessage(
+          {
+            type: 'SESSION_STATE_UPDATED',
+            payload: { session },
+            sender: 'background',
+            timestamp: Date.now(),
+          },
+          () => {
+            // Read and consume lastError so Chrome does not log "Unchecked runtime.lastError: The message port closed..."
+            if (chrome.runtime.lastError) {
+              // Intentionally ignored when no listener is active (e.g. side panel closed)
+            }
+          }
+        );
       }
     } catch {
       // Ignore background messaging exceptions when sidepanel is closed
@@ -41,17 +66,31 @@ export function initMessageRouter() {
       sender: chrome.runtime.MessageSender,
       sendResponse: (response: ExtensionResponse) => void
     ) => {
-      // Must return true to indicate asynchronous response
+      // If the message is not designated for background handling (e.g. broadcast or tab-specific),
+      // return false synchronously so we do NOT hold open an unhandled message port.
+      if (!rawMessage || !rawMessage.type || !BACKGROUND_HANDLED_MESSAGES.has(rawMessage.type)) {
+        return false;
+      }
+
+      // Return true to indicate asynchronous response for valid background messages
       handleMessage(rawMessage, sender)
         .then((data) => {
-          sendResponse({ success: true, data });
+          try {
+            sendResponse({ success: true, data });
+          } catch {
+            // Port might have closed if sender navigated or closed
+          }
         })
         .catch((err) => {
           logger.error(`Handler failed for message ${rawMessage?.type}: ${err instanceof Error ? err.message : String(err)}`);
-          sendResponse({
-            success: false,
-            error: err instanceof Error ? err.message : String(err),
-          });
+          try {
+            sendResponse({
+              success: false,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          } catch {
+            // Port might have closed if sender navigated or closed
+          }
         });
 
       return true;
