@@ -10,15 +10,21 @@ describe('WorkflowEngine', () => {
       origin: 'https://app.example.com',
       pathname: '/admin/students',
       title: 'Répertoire des étudiants',
-      metadata: { description: '', language: 'fr', viewport: '', charset: 'utf-8', hasRobotsMeta: false },
+      metadata: {
+        title: 'Répertoire des étudiants',
+        h1Count: 1,
+        h1Texts: ['Répertoire'],
+        headingCounts: { h1: 1, h2: 0, h3: 0, h4: 0, h5: 0, h6: 0 },
+      },
       links: [],
       buttons: [
         {
           selector: 'button.btn-add',
           text: 'Nouveau Candidat',
           type: 'button',
-          disabled: false,
-          isProminent: true,
+          isVisible: true,
+          isDisabled: false,
+          riskLevel: 'LOW',
         },
       ],
       forms: [
@@ -26,6 +32,7 @@ describe('WorkflowEngine', () => {
           selector: 'form#create-user-form',
           action: '/api/candidates',
           method: 'POST',
+          riskLevel: 'LOW',
           fields: [
             {
               selector: 'input[name="nom"]',
@@ -33,8 +40,6 @@ describe('WorkflowEngine', () => {
               type: 'text',
               label: 'Nom',
               required: true,
-              disabled: false,
-              readonly: false,
             },
             {
               selector: 'input[name="email"]',
@@ -42,8 +47,6 @@ describe('WorkflowEngine', () => {
               type: 'email',
               label: 'Courriel',
               required: true,
-              disabled: false,
-              readonly: false,
             },
             {
               selector: 'button[type="submit"]',
@@ -51,8 +54,6 @@ describe('WorkflowEngine', () => {
               type: 'submit',
               label: 'Enregistrer',
               required: false,
-              disabled: false,
-              readonly: false,
             },
           ],
         },
@@ -64,7 +65,7 @@ describe('WorkflowEngine', () => {
     };
 
     // Spy on messaging to tab
-    vi.spyOn(messaging, 'sendToTab').mockImplementation(async (_tabId: number, type: any) => {
+    vi.spyOn(messaging, 'sendToTab').mockImplementation(async (_tabId: number, type: any): Promise<any> => {
       if (type === 'EXECUTE_ACTION') {
         return { executed: true, actionType: 'CLICK', selector: 'button.btn-add', durationMs: 40 };
       }

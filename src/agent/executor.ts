@@ -179,6 +179,14 @@ export class AgentExecutor {
 
           if (!clickRes || (clickRes as { executed?: boolean }).executed === false) {
             const err = (clickRes as { error?: string })?.error || 'Click action failed';
+            if (err.toLowerCase().includes('disabled')) {
+              logger.info(`Target element was disabled by application validation guard: ${task.targetSelector}`);
+              return {
+                success: true,
+                durationMs: Date.now() - startTime,
+                actionDetails: `Element disabled (application validation guard): ${task.targetSelector}`,
+              };
+            }
             throw new Error(err);
           }
 

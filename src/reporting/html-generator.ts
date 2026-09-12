@@ -26,11 +26,12 @@ export function generateHtmlReport(data: QAReportData): string {
   const findingsHtml = findings
     .map((f) => {
       const sevClass = f.severity.toLowerCase();
-      const screenshotEvidence = f.evidence.find((e) => e.type === 'screenshot');
+      const evList = f.evidence || [];
+      const screenshotEvidence = evList.find((e) => e?.type === 'screenshot');
       const screenshotData = screenshotEvidence?.data as ScreenshotEvidence | undefined;
-      const domEvidence = f.evidence.find((e) => e.type === 'dom_snippet');
-      const consoleEvidence = f.evidence.find((e) => e.type === 'console_error');
-      const netEvidence = f.evidence.find((e) => e.type === 'network_error');
+      const domEvidence = evList.find((e) => e?.type === 'dom_snippet');
+      const consoleEvidence = evList.find((e) => e?.type === 'console_error');
+      const netEvidence = evList.find((e) => e?.type === 'network_error');
 
       return `
         <div class="finding-card severity-${sevClass}">

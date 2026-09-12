@@ -49,10 +49,10 @@ export class WorkflowEngine {
 
     // 1. Identify Add/Create button in snapshot or visible DOM
     const createButtonPatterns = /(nouv|cr[ée]|add|ajouter|créer|nouvel|new|register|inscrire|postuler|\+\s*candidat|\+\s*étudiant|\+\s*utilisateur|\+\s*user)/i;
-    const candidateButton = snapshot.buttons.find(
+    const candidateButton = (snapshot.buttons || []).find(
       (b) => createButtonPatterns.test(b.text || '') || createButtonPatterns.test(b.ariaLabel || '')
-    ) || snapshot.links.find(
-      (l) => createButtonPatterns.test(l.text || '') || createButtonPatterns.test(l.ariaLabel || '')
+    ) || (snapshot.links || []).find(
+      (l) => createButtonPatterns.test(l.text || '')
     );
 
     let activeForm: DiscoveredForm | undefined = snapshot.forms[0];
@@ -116,14 +116,13 @@ export class WorkflowEngine {
     const t0 = Date.now();
 
     for (const field of activeForm.fields) {
-      if (field.type === 'hidden' || field.disabled || field.readonly) continue;
+      if (field.type === 'hidden') continue;
 
       const syntheticVal = generateSyntheticValue({
         type: field.type,
         name: field.name,
         label: field.label,
         placeholder: field.placeholder,
-        required: field.required,
       });
 
       filledValues[field.name || field.selector] = syntheticVal;
@@ -149,25 +148,30 @@ export class WorkflowEngine {
 
     // 4. Submit the form
     onProgress?.('Submitting creation form and awaiting API data flow...');
-    const submitBtn = activeForm.fields.find(
+    const submitBtn = (activeForm?.fields || []).find(
       (f) => f.type === 'submit' || /enregistrer|sauvegarder|créer|valider|submit|save|ajouter/i.test(f.label || f.name || '')
     );
-    const submitSelector = submitBtn?.selector || `${activeForm.selector} button[type="submit"], ${activeForm.selector} input[type="submit"]`;
+    const submitSelector =
+      activeForm.submitButtonSelector ||
+      submitBtn?.selector ||
+      (activeForm.isStandalone ? activeForm.selector : `${activeForm.selector} button[type="submit"], ${activeForm.selector} input[type="submit"]`);
 
     try {
-      await sendToTab(tabId, 'EXECUTE_ACTION', {
-        action: 'CLICK',
+      const submitRes = await sendToTab(tabId, 'EXECUTE_ACTION', {
+        action: 'SUBMIT',
         selector: submitSelector,
         options: {
-          tagHint: 'button, input[type="submit"]',
+          tagHint: 'form, button, input[type="submit"]',
           timeoutMs: 4000,
         },
       });
 
+      const wasSuccessful = Boolean(submitRes && (submitRes as { executed?: boolean }).executed !== false);
+
       steps.push({
         step: 'SUBMIT_FORM',
-        success: true,
-        details: 'Submitted record creation form',
+        success: wasSuccessful,
+        details: wasSuccessful ? 'Submitted record creation form' : 'Form submission bypassed or pending required fields',
       });
     } catch (submitErr) {
       steps.push({
@@ -190,7 +194,7 @@ export class WorkflowEngine {
       }
     } catch {}
 
-    const mutationTx = capturedTransactions.find((t) => t.isMutation) || capturedTransactions[capturedTransactions.length - 1];
+    const mutationTx = (capturedTransactions || []).find((t) => t.isMutation) || capturedTransactions[capturedTransactions.length - 1];
 
     if (mutationTx) {
       const isOk = mutationTx.status >= 200 && mutationTx.status < 300;
@@ -205,24 +209,26 @@ export class WorkflowEngine {
         findings.push({
           id: `finding_api_err_${Date.now()}`,
           sessionId,
-          url: snapshot.url,
+          page: snapshot.url,
           category: 'FUNCTIONAL',
           severity: 'HIGH',
           title: `Data Submission API Error: ${mutationTx.method} ${mutationTx.status}`,
           description: `When submitting new record data, the backend API responded with HTTP status ${mutationTx.status}. Request payload was rejected.`,
-          element: {
-            selector: activeForm.selector,
-            tagName: 'form',
-            text: 'Submit Form',
-          },
-          reproductionSteps: [
+          element: activeForm.selector,
+          selector: activeForm.selector,
+          steps: [
             'Trigger record creation',
             `Fill form data with synthetic attributes (${JSON.stringify(filledValues)})`,
             'Click submit button',
             `Observe network failure on ${mutationTx.url}`,
           ],
-          impact: 'Users cannot create or persist new records on this application.',
-          status: 'CONFIRMED',
+          expected: 'Form submission persists data successfully with HTTP 2xx response',
+          actual: `API responded with HTTP status ${mutationTx.status}`,
+          recommendation: 'Inspect backend endpoint validation rules and database schema constraints.',
+          confidence: 0.95,
+          evidence: [],
+          retestCount: 0,
+          status: 'FAIL',
           timestamp: Date.now(),
         });
       }

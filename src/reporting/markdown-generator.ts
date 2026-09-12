@@ -119,9 +119,10 @@ export function generateMarkdownReport(data: QAReportData): string {
         }
 
         // Evidence details
-        const domEvidence = f.evidence.find((e) => e.type === 'dom_snippet');
-        const consoleEvidence = f.evidence.find((e) => e.type === 'console_error');
-        const netEvidence = f.evidence.find((e) => e.type === 'network_error');
+        const evList = f.evidence || [];
+        const domEvidence = evList.find((e) => e?.type === 'dom_snippet');
+        const consoleEvidence = evList.find((e) => e?.type === 'console_error');
+        const netEvidence = evList.find((e) => e?.type === 'network_error');
 
         if (domEvidence || consoleEvidence || netEvidence) {
           md += `<details>\n<summary>🔬 Technical Evidence</summary>\n\n`;

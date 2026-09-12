@@ -67,6 +67,13 @@ export class IndexedDBClient {
         if (!db.objectStoreNames.contains('discovery_maps')) {
           db.createObjectStore('discovery_maps', { keyPath: 'sessionId' });
         }
+
+        // Learned workflows store for Zero-AI autonomous execution
+        if (!db.objectStoreNames.contains('learned_workflows')) {
+          const workflowStore = db.createObjectStore('learned_workflows', { keyPath: 'id' });
+          workflowStore.createIndex('origin', 'origin', { unique: false });
+          workflowStore.createIndex('lastVerified', 'lastVerified', { unique: false });
+        }
       };
 
       request.onsuccess = (event: Event) => {

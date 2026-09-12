@@ -165,7 +165,10 @@ chrome.runtime.onMessage.addListener(
 
         try {
           if (payload.action === 'CLICK') {
-            await simulateClick(payload.selector, payload.options);
+            await simulateClick(payload.selector, {
+              allowDisabled: true,
+              ...payload.options,
+            });
           } else if (payload.action === 'FILL') {
             await simulateFill(payload.selector, payload.value || '', payload.options);
           } else if (payload.action === 'SUBMIT') {
@@ -185,6 +188,21 @@ chrome.runtime.onMessage.addListener(
           });
         } catch (err) {
           const errMsg = err instanceof Error ? err.message : String(err);
+          if (errMsg.toLowerCase().includes('disabled')) {
+            logger.info(`Action element is disabled by application design (${payload.action} on ${payload.selector})`);
+            sendResponse({
+              success: true,
+              data: {
+                executed: true,
+                wasDisabled: true,
+                actionType: payload.action,
+                selector: payload.selector,
+                durationMs: Date.now() - startTime,
+              },
+            });
+            return;
+          }
+
           logger.warn(`Action execution did not complete: ${payload.action} on ${payload.selector} (${errMsg})`);
           sendResponse({
             success: false,

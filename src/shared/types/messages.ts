@@ -117,6 +117,8 @@ export interface MessageMap {
         waitForNavigation?: boolean;
         textHint?: string;
         tagHint?: string;
+        allowDisabled?: boolean;
+        throwOnDisabled?: boolean;
       };
     };
     response: {
@@ -125,6 +127,7 @@ export interface MessageMap {
       selector: string;
       durationMs: number;
       error?: string;
+      wasDisabled?: boolean;
     };
   };
   OBSERVE_STATE: {

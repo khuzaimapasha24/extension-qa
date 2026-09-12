@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { simulateClick, simulateFill, simulateFormSubmit } from '../../src/content/action-simulator';
+import { simulateClick, simulateFill, simulateFormSubmit, findDOMElement } from '../../src/content/action-simulator';
 
 describe('ActionSimulator', () => {
   let container: HTMLDivElement;
@@ -50,6 +50,15 @@ describe('ActionSimulator', () => {
       container.appendChild(button);
 
       await expect(simulateClick(button)).rejects.toThrow(/disabled/i);
+    });
+
+    it('bypasses error when target element is disabled and allowDisabled is true', async () => {
+      const button = document.createElement('button');
+      button.id = 'disabled-btn';
+      button.disabled = true;
+      container.appendChild(button);
+
+      await expect(simulateClick(button, { allowDisabled: true })).resolves.not.toThrow();
     });
 
     it('throws when selector is not found', async () => {
@@ -103,6 +112,21 @@ describe('ActionSimulator', () => {
 
       await expect(simulateFill(readOnlyInput, 'val')).rejects.toThrow(/read-only/i);
     });
+
+    it('handles file inputs cleanly with DataTransfer and change event without throwing DOMException', async () => {
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.id = 'document-upload';
+      container.appendChild(fileInput);
+
+      let changeFired = false;
+      fileInput.addEventListener('change', () => {
+        changeFired = true;
+      });
+
+      await expect(simulateFill(fileInput, 'evidence.pdf', { scroll: false })).resolves.not.toThrow();
+      expect(changeFired).toBe(true);
+    });
   });
 
   describe('simulateFormSubmit', () => {
@@ -139,6 +163,53 @@ describe('ActionSimulator', () => {
 
       await simulateFormSubmit(submitBtn, { scroll: false });
       expect(submitted).toBe(true);
+    });
+  });
+
+  describe('Resilient findDOMElement', () => {
+    it('resolves links by slug or relative path when exact href attribute differs', () => {
+      const link = document.createElement('a');
+      link.setAttribute('href', '/portal/admin/exam-simulators');
+      link.textContent = 'Exam Simulators';
+      container.appendChild(link);
+
+      const found = findDOMElement('a[href="/portal/admin/exam-simulators"]', {}, document);
+      expect(found).toBe(link);
+
+      // Relative slug resolution
+      const foundSlug = findDOMElement('a[href="exam-simulators"]', {}, document);
+      expect(foundSlug).toBe(link);
+    });
+
+    it('resolves relaxed hierarchical select selectors when intermediate wrappers shift', () => {
+      const main = document.createElement('main');
+      const div1 = document.createElement('div');
+      const div2 = document.createElement('div');
+      const select1 = document.createElement('select');
+      select1.name = 'status';
+      const select2 = document.createElement('select');
+      select2.name = 'trainer';
+
+      div1.appendChild(select1);
+      div2.appendChild(select2);
+      main.appendChild(div1);
+      main.appendChild(div2);
+      container.appendChild(main);
+
+      // Selector with deep rigid nth-of-type path that shifted
+      const resolved = findDOMElement('main > div > div:nth-of-type(2) > select:nth-of-type(2)', {}, document);
+      expect(resolved).toBe(select2);
+    });
+
+    it('resolves fallback action button in container when button[type="submit"] is queried but absent', () => {
+      const main = document.createElement('main');
+      const saveBtn = document.createElement('button');
+      saveBtn.textContent = 'Enregistrer';
+      main.appendChild(saveBtn);
+      container.appendChild(main);
+
+      const resolved = findDOMElement('main button[type="submit"], main input[type="submit"]', {}, document);
+      expect(resolved).toBe(saveBtn);
     });
   });
 });

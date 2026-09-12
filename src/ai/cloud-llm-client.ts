@@ -111,7 +111,7 @@ export class CloudLLMClient {
 
   /**
    * Dispatches a prompt to Google Gemini's REST API with automated fallback across available models.
-   * Sends the official x-goog-api-key header to ensure compatibility with newer AQ. keys,
+   * Sends the official x-goog-api-key header for Google AI Studio API keys (starts with AIzaSy...),
    * and handles OAuth access tokens (ya29.) with Authorization Bearer.
    */
   public async callGemini(
@@ -146,7 +146,7 @@ export class CloudLLMClient {
           headers['Authorization'] = `Bearer ${cleanedKey}`;
           url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(currentModel)}:generateContent`;
         } else {
-          // Google AI Studio API key (AIza... or AQ....)
+          // Google AI Studio API key (starts with AIzaSy...)
           headers['x-goog-api-key'] = cleanedKey;
           url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(currentModel)}:generateContent?key=${encodeURIComponent(cleanedKey)}`;
         }
@@ -600,6 +600,13 @@ export class CloudLLMClient {
       return { success: false, message: 'API key cannot be empty' };
     }
 
+    if (provider === 'gemini' && trimmedKey.startsWith('AQ.')) {
+      return {
+        success: false,
+        message: 'Gemini authentication error: Invalid placeholder key. Keys starting with "AQ." are invalid. Please get a real API key from Google AI Studio (https://aistudio.google.com) starting with "AIzaSy...".',
+      };
+    }
+
     const startTime = Date.now();
     const testPrompt = 'Respond strictly with the single word: OK';
 
@@ -625,8 +632,8 @@ export class CloudLLMClient {
       };
     } catch (err) {
       let errMsg = err instanceof Error ? err.message : String(err);
-      if (errMsg.includes('ACCESS_TOKEN_TYPE_UNSUPPORTED') || errMsg.includes('UNAUTHENTICATED')) {
-        errMsg = `Gemini authentication error: Invalid credentials. Please verify your Google AI Studio API key (starts with AIzaSy... or AQ....). (${errMsg})`;
+      if (errMsg.includes('ACCESS_TOKEN_TYPE_UNSUPPORTED') || errMsg.includes('UNAUTHENTICATED') || errMsg.includes('API_KEY_INVALID')) {
+        errMsg = `Gemini authentication error: Invalid credentials. Please verify your Google AI Studio API key (starts with AIzaSy...). (${errMsg})`;
       }
       logger.warn(`API Key test failed for ${provider}: ${errMsg}`);
       return {

@@ -86,11 +86,11 @@ export function initializeInPageInterceptor(): void {
       }
 
       try {
-        const response = await originalFetch.apply(this, args);
+        const response = await (originalFetch as any).apply(this, args);
         const durationMs = Date.now() - startTime;
         const cloned = response.clone();
 
-        cloned.text().then((text) => {
+        cloned.text().then((text: string) => {
           const responsePayload = safeParseJson(text);
           emitTransaction({
             id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,

@@ -87,6 +87,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       return;
     }
 
+    if (provider === 'gemini' && key.startsWith('AQ.')) {
+      setTestResults((prev) => ({
+        ...prev,
+        [provider]: {
+          success: false,
+          message: 'Invalid key: Keys starting with "AQ." are invalid placeholder tokens. Please get a real Gemini API key from Google AI Studio (https://aistudio.google.com) starting with "AIzaSy...".',
+        },
+      }));
+      return;
+    }
+
     setTestingProvider(provider);
     setTestResults((prev) => ({ ...prev, [provider]: null }));
 
@@ -253,7 +264,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
                   <input
                     type={showKeys.gemini ? 'text' : 'password'}
-                    placeholder="AIzaSy... or AQ...."
+                    placeholder="AIzaSy... (from Google AI Studio)"
                     value={aiConfig.geminiApiKey || ''}
                     onChange={(e) => updateAiConfig({ geminiApiKey: e.target.value })}
                     className="settings-input"
@@ -285,6 +296,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 >
                   {testingProvider === 'gemini' ? <Loader2 size={11} className="spin" /> : 'Test Key'}
                 </button>
+              </div>
+              <div style={{ fontSize: '9.5px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                Get your free API key at{' '}
+                <a
+                  href="https://aistudio.google.com/app/apikey"
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ color: 'var(--color-primary)', textDecoration: 'underline' }}
+                >
+                  aistudio.google.com
+                </a>
+                {' '}(starts with <code style={{ fontSize: '9px', background: 'var(--bg-surface)', padding: '1px 3px', borderRadius: '3px' }}>AIzaSy...</code>)
               </div>
               {testResults.gemini && (
                 <div

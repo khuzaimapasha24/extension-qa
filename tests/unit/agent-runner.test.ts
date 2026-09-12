@@ -15,6 +15,9 @@ describe('AgentRunner', () => {
 
   beforeEach(async () => {
     await dbClient.clear('findings');
+    try {
+      await dbClient.clear('learned_workflows');
+    } catch {}
 
     session = {
       id: 'session_test_run',

@@ -10,7 +10,7 @@ export const DEFAULT_SUPABASE_CONFIG: SupabaseConfig = {
 
 export const DEFAULT_AI_CONFIG: AIConfig = {
   provider: 'gemini',
-  geminiApiKey: 'AQ.Ab8RN6I-NGmKhXNTc2PcMu2thqA-ZE0SxNgnc2LpE1HAcgLxbQ',
+  geminiApiKey: '',
   geminiModel: 'gemini-2.5-flash',
   openaiApiKey: '',
   openaiModel: 'gpt-4o-mini',
@@ -57,5 +57,5 @@ export const CATEGORY_WEIGHTS: Record<QACategory, number> = {
 };
 
 export const DB_NAME = 'ai_qa_agent_db';
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 export const DEFAULT_MESSAGE_TIMEOUT_MS = 10000;

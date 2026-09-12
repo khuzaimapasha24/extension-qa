@@ -88,6 +88,26 @@ export function generateUniqueSelector(el: Element, doc?: Document): string {
     } catch {}
   }
 
+  // 5.5 Form controls with placeholder or autocomplete
+  if (['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName)) {
+    const placeholder = el.getAttribute('placeholder');
+    if (placeholder && placeholder.trim().length > 0) {
+      try {
+        const cleanPh = placeholder.trim().replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        const sel = `${el.tagName.toLowerCase()}[placeholder="${cleanPh}"]`;
+        if (isUnique(sel)) return sel;
+      } catch {}
+    }
+
+    const autocomplete = el.getAttribute('autocomplete');
+    if (autocomplete && autocomplete !== 'off') {
+      try {
+        const sel = `${el.tagName.toLowerCase()}[autocomplete="${autocomplete.trim()}"]`;
+        if (isUnique(sel)) return sel;
+      } catch {}
+    }
+  }
+
   // 6. Anchored hierarchical path (walking up until anchored to a landmark or body)
   const path: string[] = [];
   let current: Element | null = el;
@@ -124,6 +144,16 @@ export function generateUniqueSelector(el: Element, doc?: Document): string {
     }
 
     current = parentNode;
+  }
+
+  // Check if a concise container + target selector is already unique
+  if (path.length > 2) {
+    const first = path[0];
+    const last = path[path.length - 1];
+    const conciseDescendant = `${first} ${last}`;
+    if (isUnique(conciseDescendant)) {
+      return conciseDescendant;
+    }
   }
 
   return path.join(' > ');
@@ -419,16 +449,18 @@ export function extractForms(doc: Document = document): DiscoveredForm[] {
         };
       });
 
-      // Find candidate buttons in container that are visible and NOT disabled
-      const candidateButtons = Array.from(
+      // Find candidate buttons in container that are visible
+      const allContainerButtons = Array.from(
         container.querySelectorAll<HTMLElement>('button, [role="button"], input[type="submit"]')
-      ).filter((btn) => {
+      ).filter((btn) => isElementVisible(btn));
+
+      const candidateButtons = allContainerButtons.filter((btn) => {
         const isDisabled = Boolean(
           (btn as HTMLButtonElement).disabled ||
           btn.getAttribute('aria-disabled') === 'true' ||
           btn.classList.contains('disabled')
         );
-        return !isDisabled && isElementVisible(btn);
+        return !isDisabled;
       });
 
       let submitBtn = candidateButtons.find((btn) => {
@@ -438,6 +470,17 @@ export function extractForms(doc: Document = document): DiscoveredForm[] {
           text
         );
       });
+
+      // If no enabled submit button was found, check visible buttons that might be initially disabled pending input
+      if (!submitBtn) {
+        submitBtn = allContainerButtons.find((btn) => {
+          if (btn.getAttribute('type') === 'submit') return true;
+          const text = (btn.textContent || btn.getAttribute('aria-label') || btn.getAttribute('title') || '').trim();
+          return /save|enregistrer|submit|valider|update|mettre.*jour|appliquer|envoyer|send|search|rechercher|confirm|confirmer|cr[ée]|add|ajouter|nouv/i.test(
+            text
+          );
+        });
+      }
 
       if (!submitBtn && candidateButtons.length > 0) {
         // Only pick fallback button if it's not a cancel, delete, back, or pagination control

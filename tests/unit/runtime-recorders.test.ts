@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ConsoleRecorder } from '../../src/content/console-recorder';
 import { NetworkRecorder } from '../../src/content/network-recorder';
 

@@ -1,8 +1,10 @@
 import React from 'react';
-import { Play, Globe, Layers, Link as LinkIcon, MousePointerClick, FileText, Image as ImageIcon, RefreshCw, AlertTriangle, Compass } from 'lucide-react';
+import { Play, Globe, Layers, Link as LinkIcon, MousePointerClick, FileText, Image as ImageIcon, RefreshCw, AlertTriangle, Compass, Bot } from 'lucide-react';
 import { QASession } from '../../shared/types/session';
 import { WebsiteDiscoveryMap } from '../../shared/types/discovery';
 import { WebsiteFlowAnalysis } from '../../reporting/report-types';
+import { workflowLearner } from '../../agent/workflow-learner';
+import { LearnedWorkflowRecord } from '../../shared/types/storage';
 
 interface DashboardViewProps {
   currentTabUrl: string;
@@ -24,6 +26,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onRefreshTab,
 }) => {
   const isRunning = session && session.state !== 'IDLE' && session.state !== 'COMPLETED' && session.state !== 'ERROR';
+
+  const [learnedCount, setLearnedCount] = React.useState<number>(0);
+  const [currentLearned, setCurrentLearned] = React.useState<LearnedWorkflowRecord | null>(null);
+
+  React.useEffect(() => {
+    let mounted = true;
+    const loadLearned = async () => {
+      try {
+        const all = await workflowLearner.getAllLearnedWorkflows();
+        if (mounted) setLearnedCount(all.length);
+        if (currentTabUrl) {
+          const current = await workflowLearner.getLearnedWorkflow(currentTabUrl);
+          if (mounted) setCurrentLearned(current);
+        }
+      } catch {}
+    };
+    loadLearned();
+    return () => {
+      mounted = false;
+    };
+  }, [currentTabUrl, session?.state]);
 
   const isRestrictedUrl = Boolean(
     currentTabUrl &&
@@ -127,6 +150,44 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           )}
         </div>
       )}
+
+      {/* Autonomous Self-Learning & Workflow Memory Status */}
+      <div style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>
+            <Bot size={13} color="var(--color-primary)" />
+            <span>AUTONOMOUS WORKFLOW MEMORY</span>
+          </div>
+          <span
+            className="badge"
+            style={{
+              fontSize: '9px',
+              background: currentLearned ? 'rgba(16, 185, 129, 0.15)' : 'rgba(56, 189, 248, 0.15)',
+              color: currentLearned ? 'var(--color-low)' : '#38bdf8',
+            }}
+          >
+            {currentLearned ? 'ZERO-AI READY' : 'SELF-LEARNING'}
+          </span>
+        </div>
+
+        <div style={{ fontSize: '11px', color: 'var(--text-main)', lineHeight: '1.4' }}>
+          {currentLearned ? (
+            <>
+              <strong>Learned Golden Path:</strong> {currentLearned.actionSteps.length} verified actions cached.
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                Self-Reliance Ratio: {Math.round((currentLearned.selfRelianceRatio || 1) * 100)}% (Executes locally without AI API calls).
+              </div>
+            </>
+          ) : (
+            <>
+              <strong>Continuous Autonomous Learning:</strong> The agent memorizes forms, file uploaders, and navigation routes on every test. Future runs execute locally without requiring AI APIs.
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                Total Learned Knowledge: {learnedCount} cached workflow routes.
+              </div>
+            </>
+          )}
+        </div>
+      </div>
 
       {/* Discovered Inventory Summary (Phase 2) */}
       {discoveryMap && (

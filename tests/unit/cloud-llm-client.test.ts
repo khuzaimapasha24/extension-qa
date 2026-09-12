@@ -170,7 +170,7 @@ describe('CloudLLMClient', () => {
       expect(res.message).toContain('401');
     });
 
-    it('sends x-goog-api-key header for AQ. and AIza format keys', async () => {
+    it('sends x-goog-api-key header for AIza format keys', async () => {
       const mockFetch = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
@@ -179,14 +179,14 @@ describe('CloudLLMClient', () => {
       });
       global.fetch = mockFetch;
 
-      const aqKey = 'AQ.Ab8RN6I-NGmKhXNTc2PcMu2thqA-ZE0SxNgnc2LpE1HAcgLxbQ';
-      const res = await client.testApiKey('gemini', `  "${aqKey}"  `);
+      const aizaKey = 'AIzaSyAb8RN6I-NGmKhXNTc2PcMu2thqA-ZE0SxNgnc2';
+      const res = await client.testApiKey('gemini', `  "${aizaKey}"  `);
       expect(res.success).toBe(true);
 
       expect(mockFetch).toHaveBeenCalled();
       const lastCall = mockFetch.mock.calls[0];
       const headers = lastCall[1].headers;
-      expect(headers['x-goog-api-key']).toBe(aqKey);
+      expect(headers['x-goog-api-key']).toBe(aizaKey);
       expect(headers['Authorization']).toBeUndefined();
     });
 
@@ -211,6 +211,17 @@ describe('CloudLLMClient', () => {
       expect(lastCall[0]).not.toContain('?key=');
     });
 
+    it('rejects AQ. placeholder keys immediately with actionable guidance', async () => {
+      const mockFetch = vi.fn();
+      global.fetch = mockFetch;
+
+      const res = await client.testApiKey('gemini', 'AQ.invalidKey');
+      expect(res.success).toBe(false);
+      expect(res.message).toContain('Invalid placeholder key');
+      expect(res.message).toContain('AIzaSy...');
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
     it('formats user-friendly error when ACCESS_TOKEN_TYPE_UNSUPPORTED is returned', async () => {
       global.fetch = vi.fn().mockResolvedValue({
         ok: false,
@@ -225,7 +236,7 @@ describe('CloudLLMClient', () => {
         }),
       });
 
-      const res = await client.testApiKey('gemini', 'AQ.invalidKey');
+      const res = await client.testApiKey('gemini', 'AIzaSyBadKeyCredentials');
       expect(res.success).toBe(false);
       expect(res.message).toContain('Gemini authentication error');
       expect(res.message).toContain('ACCESS_TOKEN_TYPE_UNSUPPORTED');

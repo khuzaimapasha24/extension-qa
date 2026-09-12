@@ -198,16 +198,40 @@ async function handleMessage<T extends MessageType>(
     case 'HIGHLIGHT_ELEMENT': {
       const payload = message.payload as MessageMap['HIGHLIGHT_ELEMENT']['request'];
       const currentSession = sessionManager.getCurrentSession();
-      const tabId = currentSession?.tabId || 1;
-      const response = await sendToTab(tabId, 'HIGHLIGHT_ELEMENT', payload);
-      return response as MessageMap[T]['response'];
+      let tabId = currentSession?.tabId;
+      if (!tabId || tabId <= 0) {
+        const activeTab = await getActiveInspectableTab();
+        tabId = activeTab?.id;
+      }
+      if (!tabId) {
+        return { highlighted: false } as MessageMap[T]['response'];
+      }
+      try {
+        const response = await sendToTab(tabId, 'HIGHLIGHT_ELEMENT', payload);
+        return response as MessageMap[T]['response'];
+      } catch (err) {
+        logger.debug('HIGHLIGHT_ELEMENT gracefully bypassed (tab navigating/unready)', err);
+        return { highlighted: false } as MessageMap[T]['response'];
+      }
     }
 
     case 'CLEAR_HIGHLIGHTS': {
       const currentSession = sessionManager.getCurrentSession();
-      const tabId = currentSession?.tabId || 1;
-      const response = await sendToTab(tabId, 'CLEAR_HIGHLIGHTS', {});
-      return response as MessageMap[T]['response'];
+      let tabId = currentSession?.tabId;
+      if (!tabId || tabId <= 0) {
+        const activeTab = await getActiveInspectableTab();
+        tabId = activeTab?.id;
+      }
+      if (!tabId) {
+        return { cleared: true } as MessageMap[T]['response'];
+      }
+      try {
+        const response = await sendToTab(tabId, 'CLEAR_HIGHLIGHTS', {});
+        return response as MessageMap[T]['response'];
+      } catch (err) {
+        logger.debug('CLEAR_HIGHLIGHTS gracefully ignored', err);
+        return { cleared: true } as MessageMap[T]['response'];
+      }
     }
 
     default:

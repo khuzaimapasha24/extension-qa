@@ -16,9 +16,9 @@ export class SettingsStore {
           ...DEFAULT_AI_CONFIG,
           ...(stored.ai || {}),
         };
-        // Auto-inject default key if user hasn't set one yet
-        if (!aiConfig.geminiApiKey || !aiConfig.geminiApiKey.trim()) {
-          aiConfig.geminiApiKey = DEFAULT_AI_CONFIG.geminiApiKey;
+        // Sanitize legacy dummy/invalid placeholder keys (e.g., AQ.Ab8RN6I...)
+        if (aiConfig.geminiApiKey && (aiConfig.geminiApiKey.startsWith('AQ.') || aiConfig.geminiApiKey.includes('AQ.Ab8RN6I'))) {
+          aiConfig.geminiApiKey = '';
         }
         if (!aiConfig.geminiModel) {
           aiConfig.geminiModel = 'gemini-2.5-flash';

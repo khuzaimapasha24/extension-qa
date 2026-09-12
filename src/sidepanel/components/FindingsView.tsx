@@ -154,10 +154,11 @@ export const FindingsView: React.FC<FindingsViewProps> = ({ findings }) => {
         ) : (
           filtered.map((item) => {
             const isExpanded = expandedId === item.id;
-            const screenshotEvidence = item.evidence.find((e) => e.type === 'screenshot');
-            const consoleEvidence = item.evidence.find((e) => e.type === 'console_error');
-            const networkEvidence = item.evidence.find((e) => e.type === 'network_error');
-            const domSnippetEvidence = item.evidence.find((e) => e.type === 'dom_snippet');
+            const evList = item.evidence || [];
+            const screenshotEvidence = evList.find((e) => e?.type === 'screenshot');
+            const consoleEvidence = evList.find((e) => e?.type === 'console_error');
+            const networkEvidence = evList.find((e) => e?.type === 'network_error');
+            const domSnippetEvidence = evList.find((e) => e?.type === 'dom_snippet');
 
             const screenshotData = screenshotEvidence?.data as ScreenshotEvidence | undefined;
             const consoleData = consoleEvidence?.data as ConsoleErrorEvidence | undefined;

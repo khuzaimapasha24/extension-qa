@@ -79,13 +79,26 @@ export class AgentObserver {
         timestamp: Date.now(),
       };
     } catch (err) {
-      logger.error(`Failed to capture post-state for task ${taskId}`, err);
+      logger.info(`Tab state observation intercepted or page navigated for task ${taskId}:`, err);
+
+      let actualUrl = preUrl;
+      let urlChanged = false;
+      try {
+        if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.get) {
+          const tab = await chrome.tabs.get(tabId);
+          if (tab && tab.url) {
+            actualUrl = tab.url;
+            urlChanged = Boolean(preUrl && actualUrl && preUrl !== actualUrl);
+          }
+        }
+      } catch {}
+
       return {
         taskId,
         preUrl,
-        postUrl: preUrl,
-        urlChanged: false,
-        domMutationsCount: 0,
+        postUrl: actualUrl,
+        urlChanged,
+        domMutationsCount: urlChanged ? 1 : 0,
         modalAppeared: false,
         errorAlertAppeared: false,
         successAlertAppeared: false,

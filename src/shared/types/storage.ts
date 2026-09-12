@@ -39,6 +39,31 @@ export interface SettingRecord<T = unknown> {
   updatedAt: number;
 }
 
+export interface LearnedWorkflowRecord {
+  id: string; // origin + '#' + path
+  origin: string;
+  url: string;
+  path: string;
+  title: string;
+  learnedSelectors: Record<string, {
+    primary: string;
+    fallbacks: string[];
+    role: string;
+    successCount: number;
+  }>;
+  formPresets: Record<string, Record<string, string>>;
+  actionSteps: Array<{
+    type: import('./agent').TestTaskType | 'CLICK' | 'FILL' | 'SUBMIT';
+    selector: string;
+    value?: string;
+    label?: string;
+  }>;
+  executionCount: number;
+  autonomousSuccessCount: number;
+  lastVerified: number;
+  selfRelianceRatio: number;
+}
+
 export interface DatabaseSchema {
   sessions: QASession;
   findings: Finding;
@@ -48,4 +73,5 @@ export interface DatabaseSchema {
   settings: SettingRecord;
   page_snapshots: import('./discovery').PageSnapshot;
   discovery_maps: import('./discovery').WebsiteDiscoveryMap;
+  learned_workflows: LearnedWorkflowRecord;
 }

@@ -10,6 +10,7 @@ import { AgentVerifier, agentVerifier } from './verifier';
 import { AIReasoner, aiReasoner as defaultAiReasoner } from '../ai/ai-reasoner';
 import { sessionStore } from '../storage/session-store';
 import { sendToTab } from '../shared/messaging/bus';
+import { workflowLearner } from './workflow-learner';
 import { createLogger } from '../shared/logger/logger';
 
 const logger = createLogger('AgentRunner');
@@ -77,7 +78,21 @@ export class AgentRunner {
       currentAction: `Synthesizing dynamic test plan for ${snapshot.url}...`,
     });
 
-    const plan = this.planner.planTasks(snapshot, session.id, session.config);
+    const learned = await workflowLearner.getLearnedWorkflow(snapshot.url);
+    let plan: TestPlan;
+    if (learned && learned.actionSteps.length > 0) {
+      logger.info(`Found learned workflow for ${snapshot.url} with ${learned.actionSteps.length} steps (Self-Reliance: ${Math.round(learned.selfRelianceRatio * 100)}%). Executing from autonomous memory.`);
+      plan = workflowLearner.generateAutonomousPlan(learned, session.id);
+      const freshPlan = this.planner.planTasks(snapshot, session.id, session.config);
+      for (const t of freshPlan.tasks) {
+        if (!plan.tasks.some((pt) => pt.targetSelector === t.targetSelector)) {
+          plan.tasks.push(t);
+        }
+      }
+    } else {
+      plan = this.planner.planTasks(snapshot, session.id, session.config);
+    }
+
     this.activePlan = plan;
     plan.status = 'IN_PROGRESS';
 
@@ -85,6 +100,7 @@ export class AgentRunner {
     const totalTasks = plan.tasks.length;
     let passedCount = 0;
     let failedCount = 0;
+    let consecutiveNotFound = 0;
 
     // 2. Loop through planned tasks
     for (let i = 0; i < plan.tasks.length; i++) {
@@ -117,6 +133,12 @@ export class AgentRunner {
       });
 
       task.executionTimeMs = execResult.durationMs;
+
+      if (execResult.error && execResult.error.toLowerCase().includes('not found')) {
+        consecutiveNotFound++;
+      } else {
+        consecutiveNotFound = 0;
+      }
 
       // Step: OBSERVING
       await onProgress({
@@ -307,8 +329,20 @@ export class AgentRunner {
       }
 
       // If action navigated to another page, complete the current page's task plan cleanly
-      if (obsResult.urlChanged && obsResult.postUrl !== preState.url && i < plan.tasks.length - 1) {
+      const hasNavigated = obsResult.urlChanged || (obsResult.postUrl && preState.url && obsResult.postUrl !== preState.url);
+      if (hasNavigated && i < plan.tasks.length - 1) {
         logger.info(`Navigation detected: ${preState.url} -> ${obsResult.postUrl}. Completing previous page plan.`);
+        for (let j = i + 1; j < plan.tasks.length; j++) {
+          if (plan.tasks[j].status === 'PENDING') {
+            plan.tasks[j].status = 'SKIPPED';
+          }
+        }
+        break;
+      }
+
+      // If multiple elements were missing consecutively, the view transitioned or changed
+      if (consecutiveNotFound >= 3 && i < plan.tasks.length - 1) {
+        logger.info(`Multiple consecutive elements not found (${consecutiveNotFound}). View transitioned; skipping remaining obsolete tasks.`);
         for (let j = i + 1; j < plan.tasks.length; j++) {
           if (plan.tasks[j].status === 'PENDING') {
             plan.tasks[j].status = 'SKIPPED';
@@ -326,6 +360,13 @@ export class AgentRunner {
       progress: 95,
       currentAction: `Assembling comprehensive QA report: ${passedCount} passed, ${failedCount} defects confirmed.`,
     });
+
+    // 4. AUTONOMOUS LEARNING Phase: Persist verified working recipes into local knowledge base
+    try {
+      await workflowLearner.learnFromSession(session, plan, snapshot);
+    } catch (learnErr) {
+      logger.debug('Workflow learning step bypassed', learnErr);
+    }
 
     return { plan, findings };
   }
