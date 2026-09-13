@@ -518,7 +518,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     style={{ flex: 1 }}
                   >
                     <option value={DEFAULT_COMPAT_MODEL}>
-                      SmolLM2-360M (~580MB, Universal 32-bit) ★ Recommended
+                      SmolLM2-360M (~350MB, Universal 32-bit) ★ Recommended
                     </option>
                     {modelStatus.hardwareReport?.hasShaderF16 ? (
                       <option value={F16_FAST_MODEL}>
@@ -526,7 +526,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       </option>
                     ) : null}
                     <option value={DEFAULT_FULL_MODEL}>Llama-3.2-1B (~800MB, Full Reasoning)</option>
-                    <option value="SmolLM2-360M-Instruct-q0f32-MLC">SmolLM2-360M (~1.7GB, Unquantized)</option>
                   </select>
 
                   <button
@@ -592,8 +591,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       {modelStatus.lastError || 'Could not allocate WebGPU memory for model weights.'}
                     </div>
                     <div style={{ marginTop: '4px', fontSize: '10px', color: 'var(--text-muted)' }}>
-                      💡 Tip: You can select the <strong>Universal Compatibility</strong> model or use{' '}
+                      💡 Tip: Select the <strong>Universal Compatibility</strong> model (~350MB) or use{' '}
                       <strong>Google Gemini</strong> above for instant cloud reasoning.
+                    </div>
+                    <div style={{ marginTop: '8px', display: 'flex', gap: '8px' }}>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={async () => {
+                          setIsClearingCache(true);
+                          await modelManager.clearCache();
+                          setIsClearingCache(false);
+                          handleLoadModel();
+                        }}
+                        disabled={isClearingCache}
+                        style={{ fontSize: '10px', padding: '4px 8px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                      >
+                        <RotateCcw size={11} /> {isClearingCache ? 'Cleaning...' : 'Clear Cache & Retry'}
+                      </button>
                     </div>
                   </div>
                 )}

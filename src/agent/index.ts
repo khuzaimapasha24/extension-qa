@@ -5,3 +5,6 @@ export * from './observer';
 export * from './reasoner';
 export * from './verifier';
 export * from './runner';
+export * from './self-healing-locator';
+export * from './patch-generator';
+export * from './github-pr-generator';

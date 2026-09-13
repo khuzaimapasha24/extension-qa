@@ -121,8 +121,31 @@ export class ModelManager {
       } catch (err) {
         const primaryError = err instanceof Error ? err.message : String(err);
 
+        // If error was related to Cache or Network, clean partial cache to avoid corrupt state
+        if (primaryError.includes('Cache') || primaryError.includes('network') || primaryError.includes('fetch')) {
+          logger.warn('Cache or network error detected during model download. Cleaning partial cache entries...');
+          try {
+            if (typeof caches !== 'undefined') {
+              const keys = await caches.keys();
+              for (const key of keys) {
+                if (key.includes('webllm') || key.includes('mlc')) {
+                  await caches.delete(key);
+                }
+              }
+            }
+          } catch (cErr) {
+            logger.debug('Error clearing caches after failure', cErr);
+          }
+        }
+
         // Automatic fallback to universal compatibility model if initial attempt failed
-        if (this.currentModelId !== DEFAULT_COMPAT_MODEL && ((this.currentModelId || '').includes('SmolLM2') || (this.currentModelId || '').includes('q0f32') || (this.currentModelId || '').includes('q4f16') || (this.currentModelId || '').includes('f16'))) {
+        if (
+          this.currentModelId !== DEFAULT_COMPAT_MODEL &&
+          ((this.currentModelId || '').includes('SmolLM2') ||
+            (this.currentModelId || '').includes('q0f32') ||
+            (this.currentModelId || '').includes('q4f16') ||
+            (this.currentModelId || '').includes('f16'))
+        ) {
           try {
             logger.info(`Model ${this.currentModelId} encountered error (${primaryError}). Switching smoothly to universal compatibility model ${DEFAULT_COMPAT_MODEL}...`);
             this.progressText = `Switching to universal model ${DEFAULT_COMPAT_MODEL}...`;
@@ -142,9 +165,19 @@ export class ModelManager {
         }
 
         this.status = 'ERROR';
-        this.lastError = primaryError;
+        let friendlyError = primaryError;
+        if (
+          primaryError.includes('Cache.add') ||
+          primaryError.includes('Cache.put') ||
+          primaryError.includes('network error') ||
+          primaryError.includes('fetch') ||
+          primaryError.includes('Failed to fetch')
+        ) {
+          friendlyError = 'Network connection interrupted while downloading model shards from Hugging Face. Please ensure an active internet connection, or click "Clear Cache & Retry".';
+        }
+        this.lastError = friendlyError;
         this.engine = null;
-        logger.error(`Failed to load model ${this.currentModelId || 'unknown'}: ${primaryError}`, err);
+        logger.error(`Failed to load model ${this.currentModelId || 'unknown'}: ${friendlyError}`, err);
         return false;
       } finally {
         this.loadPromise = null;

@@ -128,6 +128,25 @@ describe('ReportEngine', () => {
 
     const pdfHtml = reportEngine.formatReport(reportData, 'PDF');
     expect(pdfHtml).toContain('@media print');
+
+    const playwrightCode = reportEngine.formatReport(reportData, 'PLAYWRIGHT');
+    expect(playwrightCode).toContain("import { test, expect } from '@playwright/test';");
+    expect(playwrightCode).toContain('Acme SuperStore');
+
+    const cypressCode = reportEngine.formatReport(reportData, 'CYPRESS');
+    expect(cypressCode).toContain('/// <reference types="cypress" />');
+    expect(cypressCode).toContain('Acme SuperStore');
+
+    const githubActionsYaml = reportEngine.formatReport(reportData, 'GITHUB_ACTIONS');
+    expect(githubActionsYaml).toContain('name: AI QA Autonomous E2E Pipeline');
+
+    const githubPrBody = reportEngine.formatReport(reportData, 'GITHUB_PR');
+    expect(githubPrBody).toContain('Autonomous QA Agent: Automated Fix Proposal');
+    expect(githubPrBody).toContain('**Total Defects Addressed** | 3');
+
+    const unifiedPatch = reportEngine.formatReport(reportData, 'UNIFIED_PATCH');
+    expect(unifiedPatch).toContain('# Autonomous QA Engineering Patch Bundle');
+    expect(unifiedPatch).toContain('--- a/');
   });
 
   it('saves report record to IndexedDB and retrieves it', async () => {

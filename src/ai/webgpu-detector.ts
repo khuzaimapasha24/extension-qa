@@ -49,7 +49,12 @@ export class WebGPUDetector {
 
     try {
       // 2. Request GPU adapter
-      const adapter = await nav.gpu.requestAdapter();
+      let adapter = null;
+      try {
+        adapter = await nav.gpu.requestAdapter();
+      } catch (err) {
+        logger.warn('Error invoking nav.gpu.requestAdapter()', err);
+      }
       if (!adapter) {
         logger.warn('navigator.gpu present, but requestAdapter returned null.');
         return {
@@ -111,9 +116,6 @@ export class WebGPUDetector {
       const tier: WebGPUTier = isFullCapability ? 'FULL_WEBGPU' : 'LIGHT_WEBGPU';
       
       // Determine recommended model based on tier:
-      // Both DEFAULT_FULL_MODEL (Llama-3.2-1B-Instruct-q4f32_1-MLC) and
-      // DEFAULT_COMPAT_MODEL (SmolLM2-360M-Instruct-q4f32_1-MLC) use universal 32-bit floats,
-      // guaranteeing rock-solid execution across all browsers without requiring unsafe flags.
       const recommendedModelId = isFullCapability ? DEFAULT_FULL_MODEL : DEFAULT_COMPAT_MODEL;
 
       logger.info(`WebGPU active: ${adapterName} (${vendor}), maxBuffer: ${maxBufferSizeMB}MB, shader-f16: ${hasShaderF16}, tier: ${tier}`);

@@ -115,7 +115,7 @@ chrome.runtime.onMessage.addListener(
           },
         });
       } catch (err) {
-        logger.error('Failed to highlight element', err);
+        logger.debug('Failed to highlight element', err);
         sendResponse({
           success: false,
           error: err instanceof Error ? err.message : String(err),
@@ -203,7 +203,7 @@ chrome.runtime.onMessage.addListener(
             return;
           }
 
-          logger.warn(`Action execution did not complete: ${payload.action} on ${payload.selector} (${errMsg})`);
+          logger.info(`Action execution did not complete: ${payload.action} on ${payload.selector} (${errMsg})`);
           sendResponse({
             success: false,
             error: errMsg,

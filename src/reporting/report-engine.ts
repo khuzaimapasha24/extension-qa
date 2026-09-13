@@ -8,6 +8,10 @@ import { QAReportData, ReportFormat, QualityRating, ExecutiveSummary } from './r
 import { generateJsonReport } from './json-generator';
 import { generateMarkdownReport } from './markdown-generator';
 import { generateHtmlReport } from './html-generator';
+import { generatePlaywrightTest } from './playwright-generator';
+import { generateCypressTest } from './cypress-generator';
+import { generateGitHubActionsWorkflow } from './github-actions-generator';
+import { patchGenerator, githubPrGenerator } from '../agent';
 import { redactor } from '../shared/security/redactor';
 import { createLogger } from '../shared/logger/logger';
 
@@ -103,6 +107,20 @@ export class ReportEngine {
       case 'HTML':
       case 'PDF':
         return generateHtmlReport(data);
+      case 'PLAYWRIGHT':
+        return generatePlaywrightTest(data);
+      case 'CYPRESS':
+        return generateCypressTest(data);
+      case 'GITHUB_ACTIONS':
+        return generateGitHubActionsWorkflow();
+      case 'GITHUB_PR': {
+        const pr = githubPrGenerator.generateCompositePR(data.findings);
+        return pr.body;
+      }
+      case 'UNIFIED_PATCH': {
+        const patches = data.findings.map((f) => patchGenerator.generatePatch(f));
+        return patchGenerator.generateUnifiedPatchFile(patches);
+      }
       default:
         throw new Error(`Unsupported report format: ${format}`);
     }

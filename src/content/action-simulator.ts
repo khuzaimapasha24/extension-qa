@@ -1,4 +1,5 @@
 import { createLogger } from '../shared/logger/logger';
+import { selfHealingLocator } from '../agent/self-healing-locator';
 
 const logger = createLogger('ActionSimulator');
 
@@ -163,8 +164,54 @@ export function findDOMElement(
     } catch {}
   }
 
+  // Tier 2.8: Compound Descendant Selector Resolution (e.g., "#main-content input", ".container button")
+  if (selector.includes(' ')) {
+    try {
+      const parts = selector.split(/\s+/).filter(Boolean);
+      if (parts.length >= 2) {
+        const containerPart = parts[0];
+        const targetDescendant = parts.slice(1).join(' ');
+        const container = doc.querySelector(containerPart);
+        if (container) {
+          const directMatch = container.querySelector(targetDescendant);
+          if (directMatch) return directMatch;
+
+          // If looking for input/form field in this container, find any interactive field
+          if (/input|select|textarea/i.test(targetDescendant) || options.tagHint?.includes('input')) {
+            const fields = Array.from(
+              container.querySelectorAll<HTMLElement>(
+                'input:not([type="hidden"]):not([type="submit"]):not([type="button"]), select, textarea, [contenteditable="true"]'
+              )
+            );
+            if (fields.length > 0) {
+              if (options.textHint) {
+                const hint = options.textHint.toLowerCase();
+                const matched = fields.find((f) => {
+                  const n = (f.getAttribute('name') || '').toLowerCase();
+                  const p = (f.getAttribute('placeholder') || '').toLowerCase();
+                  const a = (f.getAttribute('aria-label') || '').toLowerCase();
+                  return n.includes(hint) || p.includes(hint) || a.includes(hint);
+                });
+                if (matched) return matched;
+              }
+              return fields[0];
+            }
+          }
+
+          // If looking for button in this container
+          if (/button|a/i.test(targetDescendant)) {
+            const btns = Array.from(
+              container.querySelectorAll<HTMLElement>('button, a, [role="button"], input[type="submit"]')
+            );
+            if (btns.length > 0) return btns[0];
+          }
+        }
+      }
+    } catch {}
+  }
+
   // Tier 3: ID-based resolution (handles Radix UI, colons, slashes, and relaxed form fields)
-  if (selector.startsWith('#')) {
+  if (selector.startsWith('#') && !selector.includes(' ')) {
     const rawId = selector.substring(1);
     const byId = doc.getElementById(rawId);
     if (byId) return byId;
@@ -382,6 +429,22 @@ export function findDOMElement(
           if (found) return found;
         }
       } catch {}
+    }
+  } catch {}
+
+  // Tier 9: Self-Healing Heuristic Locator
+  try {
+    const healed = selfHealingLocator.heal(doc, selector, {
+      text: options.textHint,
+      tag: options.tagHint,
+      name: options.textHint,
+      ariaLabel: options.textHint,
+    });
+    if (healed.healed && healed.element) {
+      logger.info(
+        `[Self-Healing] Selector "${selector}" recovered via ${healed.strategy}: "${healed.healedSelector}" (Confidence: ${healed.confidence})`
+      );
+      return healed.element;
     }
   } catch {}
 

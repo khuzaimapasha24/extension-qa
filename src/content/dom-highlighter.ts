@@ -103,7 +103,7 @@ export function highlightElement(
       rect: cropRegion,
     };
   } catch (err) {
-    logger.error(`Error highlighting element ${selector}`, err);
+    logger.debug(`Error highlighting element ${selector}`, err);
     return { highlighted: false };
   }
 }
@@ -145,7 +145,7 @@ export function getElementCropCoordinates(
       height: Math.max(20, clampedH),
     };
   } catch (err) {
-    logger.error(`Failed to get crop coordinates for ${selector}`, err);
+    logger.debug(`Failed to get crop coordinates for ${selector}`, err);
     return null;
   }
 }

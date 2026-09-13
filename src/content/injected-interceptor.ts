@@ -65,7 +65,7 @@ export function initializeInPageInterceptor(): void {
 
   // 1. Intercept Fetch API
   if (originalFetch) {
-    window.fetch = async function (...args: any[]) {
+    window.fetch = function (...args: any[]) {
       const startTime = Date.now();
       const firstArg = args[0];
       const secondArg = args[1] || {};
@@ -77,6 +77,11 @@ export function initializeInPageInterceptor(): void {
         url = firstArg.url;
       }
 
+      // Ignore internal adblocker checks or telemetry probes
+      if (url.includes('adblocker_check') || url.includes('analytics.google.com')) {
+        return (originalFetch as any).apply(this, args);
+      }
+
       const method = (secondArg.method || (firstArg && firstArg.method) || 'GET').toUpperCase();
       const isMutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
 
@@ -85,54 +90,62 @@ export function initializeInPageInterceptor(): void {
         requestPayload = safeParseJson(secondArg.body);
       }
 
-      try {
-        const response = await (originalFetch as any).apply(this, args);
-        const durationMs = Date.now() - startTime;
-        const cloned = response.clone();
+      // Call native fetch directly and return the promise synchronously
+      const fetchPromise = (originalFetch as any).apply(this, args);
 
-        cloned.text().then((text: string) => {
-          const responsePayload = safeParseJson(text);
-          emitTransaction({
-            id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-            url,
-            method,
-            status: response.status,
-            statusText: response.statusText,
-            requestPayload,
-            responsePayload,
-            durationMs,
-            timestamp: Date.now(),
-            isMutation,
-          });
-        }).catch(() => {
-          emitTransaction({
-            id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-            url,
-            method,
-            status: response.status,
-            statusText: response.statusText,
-            requestPayload,
-            durationMs,
-            timestamp: Date.now(),
-            isMutation,
-          });
-        });
+      fetchPromise.then(
+        (response: Response) => {
+          try {
+            const durationMs = Date.now() - startTime;
+            const cloned = response.clone();
 
-        return response;
-      } catch (err) {
-        emitTransaction({
-          id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-          url,
-          method,
-          status: 0,
-          statusText: err instanceof Error ? err.message : 'Network Error',
-          requestPayload,
-          durationMs: Date.now() - startTime,
-          timestamp: Date.now(),
-          isMutation,
-        });
-        throw err;
-      }
+            cloned.text().then((text: string) => {
+              const responsePayload = safeParseJson(text);
+              emitTransaction({
+                id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                url,
+                method,
+                status: response.status,
+                statusText: response.statusText,
+                requestPayload,
+                responsePayload,
+                durationMs,
+                timestamp: Date.now(),
+                isMutation,
+              });
+            }).catch(() => {
+              emitTransaction({
+                id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                url,
+                method,
+                status: response.status,
+                statusText: response.statusText,
+                requestPayload,
+                durationMs,
+                timestamp: Date.now(),
+                isMutation,
+              });
+            });
+          } catch {}
+        },
+        (err: unknown) => {
+          try {
+            emitTransaction({
+              id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+              url,
+              method,
+              status: 0,
+              statusText: err instanceof Error ? err.message : 'Network Error',
+              requestPayload,
+              durationMs: Date.now() - startTime,
+              timestamp: Date.now(),
+              isMutation,
+            });
+          } catch {}
+        }
+      );
+
+      return fetchPromise;
     };
   }
 

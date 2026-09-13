@@ -16,8 +16,11 @@ import {
   Cloud,
   ExternalLink,
   Loader2,
+  Terminal,
+  GitPullRequest,
 } from 'lucide-react';
 import { cloudSyncEngine } from '../../cloud/cloud-sync';
+import { githubPrGenerator } from '../../agent';
 
 interface ReportViewProps {
   session: QASession | null;
@@ -28,7 +31,9 @@ interface ReportViewProps {
 
 export const ReportView: React.FC<ReportViewProps> = ({ session, findings, discoveryMap, flowAnalysis }) => {
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null);
-  const [activeSubTab, setActiveSubTab] = useState<'summary' | 'html' | 'markdown' | 'json'>('summary');
+  const [activeSubTab, setActiveSubTab] = useState<'summary' | 'automation' | 'pr' | 'html' | 'markdown' | 'json'>('summary');
+  const [automationFormat, setAutomationFormat] = useState<'playwright' | 'cypress' | 'github_actions'>('playwright');
+  const [prFormat, setPrFormat] = useState<'pr_markdown' | 'git_cli' | 'patch_file'>('pr_markdown');
   const [isUploadingCloud, setIsUploadingCloud] = useState<boolean>(false);
   const [cloudShareUrl, setCloudShareUrl] = useState<string | null>(null);
   const [cloudError, setCloudError] = useState<string | null>(null);
@@ -109,6 +114,66 @@ export const ReportView: React.FC<ReportViewProps> = ({ session, findings, disco
     }
   };
 
+  const handleDownloadPlaywright = () => {
+    const pw = reportEngine.formatReport(reportData, 'PLAYWRIGHT');
+    const safeTitle = (session.title || 'qa_test').replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
+    reportEngine.downloadFile(pw, `${safeTitle}.spec.ts`, 'application/typescript');
+  };
+
+  const handleDownloadCypress = () => {
+    const cy = reportEngine.formatReport(reportData, 'CYPRESS');
+    const safeTitle = (session.title || 'qa_test').replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
+    reportEngine.downloadFile(cy, `${safeTitle}.cy.ts`, 'application/typescript');
+  };
+
+  const handleDownloadGitHubActions = () => {
+    const yml = reportEngine.formatReport(reportData, 'GITHUB_ACTIONS');
+    reportEngine.downloadFile(yml, 'qa-pipeline.yml', 'text/yaml');
+  };
+
+  const handleCopyAutomation = async (format: 'playwright' | 'cypress' | 'github_actions') => {
+    const reportFmt =
+      format === 'playwright'
+        ? 'PLAYWRIGHT'
+        : format === 'cypress'
+          ? 'CYPRESS'
+          : 'GITHUB_ACTIONS';
+    const code = reportEngine.formatReport(reportData, reportFmt);
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      await navigator.clipboard.writeText(code);
+      setCopiedFormat(format);
+      setTimeout(() => setCopiedFormat(null), 2000);
+    }
+  };
+
+  const handleDownloadPrMarkdown = () => {
+    const pr = reportEngine.formatReport(reportData, 'GITHUB_PR');
+    reportEngine.downloadFile(pr, 'PULL_REQUEST.md', 'text/markdown');
+  };
+
+  const handleDownloadPatch = () => {
+    const patch = reportEngine.formatReport(reportData, 'UNIFIED_PATCH');
+    reportEngine.downloadFile(patch, 'qa_autonomous_remediation.patch', 'text/plain');
+  };
+
+  const handleDownloadGitCli = () => {
+    const prObj = githubPrGenerator.generateCompositePR(reportData.findings);
+    reportEngine.downloadFile(prObj.gitWorkflowCommands, 'apply_fixes.sh', 'text/x-sh');
+  };
+
+  const handleCopyPr = async (format: 'pr_markdown' | 'git_cli' | 'patch_file') => {
+    let content = '';
+    if (format === 'pr_markdown') content = reportEngine.formatReport(reportData, 'GITHUB_PR');
+    else if (format === 'patch_file') content = reportEngine.formatReport(reportData, 'UNIFIED_PATCH');
+    else content = githubPrGenerator.generateCompositePR(reportData.findings).gitWorkflowCommands;
+
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      await navigator.clipboard.writeText(content);
+      setCopiedFormat(format);
+      setTimeout(() => setCopiedFormat(null), 2000);
+    }
+  };
+
   return (
     <div className="panel-content">
       {/* Sub-navigation tabs */}
@@ -119,6 +184,32 @@ export const ReportView: React.FC<ReportViewProps> = ({ session, findings, disco
           style={{ flex: 1, padding: '4px 6px', fontSize: '11px' }}
         >
           <ShieldCheck size={12} /> Executive
+        </button>
+        <button
+          className={`tab-button ${activeSubTab === 'automation' ? 'active' : ''}`}
+          onClick={() => setActiveSubTab('automation')}
+          style={{
+            flex: 1,
+            padding: '4px 6px',
+            fontSize: '11px',
+            color: activeSubTab === 'automation' ? 'var(--color-primary-text)' : undefined,
+            fontWeight: activeSubTab === 'automation' ? 600 : undefined,
+          }}
+        >
+          <Terminal size={12} /> CI/CD
+        </button>
+        <button
+          className={`tab-button ${activeSubTab === 'pr' ? 'active' : ''}`}
+          onClick={() => setActiveSubTab('pr')}
+          style={{
+            flex: 1,
+            padding: '4px 6px',
+            fontSize: '11px',
+            color: activeSubTab === 'pr' ? '#a371f7' : undefined,
+            fontWeight: activeSubTab === 'pr' ? 600 : undefined,
+          }}
+        >
+          <GitPullRequest size={12} /> Fix & PR
         </button>
         <button
           className={`tab-button ${activeSubTab === 'html' ? 'active' : ''}`}
@@ -132,7 +223,7 @@ export const ReportView: React.FC<ReportViewProps> = ({ session, findings, disco
           onClick={() => setActiveSubTab('markdown')}
           style={{ flex: 1, padding: '4px 6px', fontSize: '11px' }}
         >
-          <Code size={12} /> Markdown
+          <Code size={12} /> MD
         </button>
         <button
           className={`tab-button ${activeSubTab === 'json' ? 'active' : ''}`}
@@ -144,19 +235,22 @@ export const ReportView: React.FC<ReportViewProps> = ({ session, findings, disco
       </div>
 
       {/* Export Action Strip */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginBottom: '8px' }}>
-        <button className="btn btn-primary" onClick={handleDownloadHtml} style={{ fontSize: '11px', padding: '6px 8px' }}>
-          <Download size={13} /> Export HTML
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px', marginBottom: '8px' }}>
+        <button
+          className="btn btn-primary"
+          onClick={() => {
+            setActiveSubTab('automation');
+            setAutomationFormat('playwright');
+          }}
+          style={{ fontSize: '10px', padding: '6px 6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+        >
+          <Terminal size={12} /> Playwright
         </button>
-        <button className="btn btn-secondary" onClick={handlePrintPdf} style={{ fontSize: '11px', padding: '6px 8px' }}>
-          <Printer size={13} /> Print / Save PDF
+        <button className="btn btn-secondary" onClick={handleDownloadHtml} style={{ fontSize: '10px', padding: '6px 6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+          <Download size={12} /> Export HTML
         </button>
-        <button className="btn btn-secondary" onClick={handleCopyMarkdown} style={{ fontSize: '11px', padding: '6px 8px' }}>
-          {copiedFormat === 'markdown' ? <Check size={13} color="var(--color-success-text)" /> : <Copy size={13} />}
-          {copiedFormat === 'markdown' ? 'Copied MD!' : 'Copy Markdown'}
-        </button>
-        <button className="btn btn-secondary" onClick={handleDownloadJson} style={{ fontSize: '11px', padding: '6px 8px' }}>
-          <Download size={13} /> Export JSON
+        <button className="btn btn-secondary" onClick={handlePrintPdf} style={{ fontSize: '10px', padding: '6px 6px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+          <Printer size={12} /> Print PDF
         </button>
       </div>
 
@@ -340,6 +434,176 @@ export const ReportView: React.FC<ReportViewProps> = ({ session, findings, disco
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {activeSubTab === 'automation' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+            Autonomous CI/CD test suite ready to commit. Runs 24/7 without manual QA intervention.
+          </div>
+
+          {/* Framework Toggle Bar */}
+          <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-surface-elevated)', padding: '3px', borderRadius: 'var(--radius-sm)' }}>
+            <button
+              className={`tab-button ${automationFormat === 'playwright' ? 'active' : ''}`}
+              onClick={() => setAutomationFormat('playwright')}
+              style={{ flex: 1, padding: '4px 6px', fontSize: '10px' }}
+            >
+              Playwright (.spec.ts)
+            </button>
+            <button
+              className={`tab-button ${automationFormat === 'cypress' ? 'active' : ''}`}
+              onClick={() => setAutomationFormat('cypress')}
+              style={{ flex: 1, padding: '4px 6px', fontSize: '10px' }}
+            >
+              Cypress (.cy.ts)
+            </button>
+            <button
+              className={`tab-button ${automationFormat === 'github_actions' ? 'active' : ''}`}
+              onClick={() => setAutomationFormat('github_actions')}
+              style={{ flex: 1, padding: '4px 6px', fontSize: '10px' }}
+            >
+              GitHub Actions (.yml)
+            </button>
+          </div>
+
+          {/* Action Buttons for Current Format */}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              className="btn btn-primary"
+              style={{ flex: 1, fontSize: '11px', padding: '6px 10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+              onClick={() => handleCopyAutomation(automationFormat)}
+            >
+              {copiedFormat === automationFormat ? <Check size={12} color="var(--color-success-text)" /> : <Copy size={12} />}
+              {copiedFormat === automationFormat ? 'Copied Code!' : 'Copy to Clipboard'}
+            </button>
+            <button
+              className="btn btn-secondary"
+              style={{ flex: 1, fontSize: '11px', padding: '6px 10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+              onClick={() => {
+                if (automationFormat === 'playwright') handleDownloadPlaywright();
+                else if (automationFormat === 'cypress') handleDownloadCypress();
+                else handleDownloadGitHubActions();
+              }}
+            >
+              <Download size={12} /> Download File
+            </button>
+          </div>
+
+          {/* Code Viewer */}
+          <textarea
+            readOnly
+            value={
+              automationFormat === 'playwright'
+                ? reportEngine.formatReport(reportData, 'PLAYWRIGHT')
+                : automationFormat === 'cypress'
+                  ? reportEngine.formatReport(reportData, 'CYPRESS')
+                  : reportEngine.formatReport(reportData, 'GITHUB_ACTIONS')
+            }
+            style={{
+              width: '100%',
+              height: '320px',
+              padding: '10px',
+              background: '#0d1117',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-sm)',
+              color: '#e6edf3',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '10.5px',
+              lineHeight: '1.4',
+              resize: 'none',
+            }}
+          />
+        </div>
+      )}
+
+      {activeSubTab === 'pr' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {/* PR Format Switcher */}
+          <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-surface)', padding: '2px', borderRadius: 'var(--radius-sm)' }}>
+            <button
+              className={`tab-button ${prFormat === 'pr_markdown' ? 'active' : ''}`}
+              onClick={() => setPrFormat('pr_markdown')}
+              style={{ flex: 1, padding: '4px 6px', fontSize: '10px' }}
+            >
+              PR Description
+            </button>
+            <button
+              className={`tab-button ${prFormat === 'git_cli' ? 'active' : ''}`}
+              onClick={() => setPrFormat('git_cli')}
+              style={{ flex: 1, padding: '4px 6px', fontSize: '10px' }}
+            >
+              Git CLI Script
+            </button>
+            <button
+              className={`tab-button ${prFormat === 'patch_file' ? 'active' : ''}`}
+              onClick={() => setPrFormat('patch_file')}
+              style={{ flex: 1, padding: '4px 6px', fontSize: '10px' }}
+            >
+              Unified .patch
+            </button>
+          </div>
+
+          {/* Action Row */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: '11px', color: '#a371f7', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <GitPullRequest size={13} /> {reportData.findings.length} Autonomous Patches Synthesized
+            </div>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <button
+                className="btn btn-secondary"
+                style={{ fontSize: '10px', padding: '3px 8px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                onClick={() => handleCopyPr(prFormat)}
+              >
+                {copiedFormat === prFormat ? (
+                  <>
+                    <Check size={11} color="var(--color-success-text)" /> Copied!
+                  </>
+                ) : (
+                  <>
+                    <Copy size={11} /> Copy
+                  </>
+                )}
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={{ fontSize: '10px', padding: '3px 8px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                onClick={() => {
+                  if (prFormat === 'pr_markdown') handleDownloadPrMarkdown();
+                  else if (prFormat === 'patch_file') handleDownloadPatch();
+                  else handleDownloadGitCli();
+                }}
+              >
+                <Download size={11} /> Download
+              </button>
+            </div>
+          </div>
+
+          {/* Code Viewer */}
+          <textarea
+            readOnly
+            value={
+              prFormat === 'pr_markdown'
+                ? reportEngine.formatReport(reportData, 'GITHUB_PR')
+                : prFormat === 'patch_file'
+                  ? reportEngine.formatReport(reportData, 'UNIFIED_PATCH')
+                  : githubPrGenerator.generateCompositePR(reportData.findings).gitWorkflowCommands
+            }
+            style={{
+              width: '100%',
+              height: '320px',
+              padding: '10px',
+              background: '#0d1117',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-sm)',
+              color: '#e6edf3',
+              fontFamily: 'var(--font-mono)',
+              fontSize: '10.5px',
+              lineHeight: '1.4',
+              resize: 'none',
+            }}
+          />
         </div>
       )}
 

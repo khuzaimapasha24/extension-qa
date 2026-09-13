@@ -1,7 +1,16 @@
 import { Finding, OverallScoreSummary } from '../shared/types/qa';
 import { WebsiteDiscoveryMap } from '../shared/types/discovery';
 
-export type ReportFormat = 'HTML' | 'JSON' | 'MARKDOWN' | 'PDF';
+export type ReportFormat =
+  | 'HTML'
+  | 'JSON'
+  | 'MARKDOWN'
+  | 'PDF'
+  | 'PLAYWRIGHT'
+  | 'CYPRESS'
+  | 'GITHUB_ACTIONS'
+  | 'GITHUB_PR'
+  | 'UNIFIED_PATCH';
 
 export type QualityRating = 'EXCELLENT' | 'GOOD' | 'FAIR' | 'NEEDS_IMPROVEMENT' | 'CRITICAL';
 

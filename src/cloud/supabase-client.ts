@@ -60,18 +60,19 @@ export class SupabaseClient {
     if (!this.isValidUrl(cleanUrl)) {
       return { success: false, error: 'Invalid Supabase URL format. Must start with https://' };
     }
-    if (!anonKey || anonKey.trim().length < 20) {
+    const cleanKey = (anonKey || '').trim().replace(/^["']|["']$/g, '');
+    if (!cleanKey || cleanKey.length < 20) {
       return { success: false, error: 'Invalid Supabase Anon Key. Expected valid JWT key.' };
     }
 
     const start = Date.now();
     try {
-      // Ping REST API root
+      // 1. Try REST API root
       const response = await fetch(`${cleanUrl}/rest/v1/`, {
         method: 'GET',
         headers: {
-          apikey: anonKey.trim(),
-          Authorization: `Bearer ${anonKey.trim()}`,
+          apikey: cleanKey,
+          Authorization: `Bearer ${cleanKey}`,
         },
       });
 
@@ -82,13 +83,44 @@ export class SupabaseClient {
         return { success: true, latencyMs };
       }
 
+      // 2. Try Auth settings endpoint as fallback verification
+      try {
+        const authRes = await fetch(`${cleanUrl}/auth/v1/settings`, {
+          method: 'GET',
+          headers: {
+            apikey: cleanKey,
+            Authorization: `Bearer ${cleanKey}`,
+          },
+        });
+        if (authRes.ok || authRes.status === 200) {
+          logger.info(`Supabase auth connection verified (${Date.now() - start}ms)`);
+          return { success: true, latencyMs: Date.now() - start };
+        }
+      } catch {}
+
+      // 3. Extract exact error detail from Supabase response
+      let errorDetail = '';
+      try {
+        const json = await response.json();
+        errorDetail = json.message || json.hint || json.error || '';
+      } catch {
+        try {
+          errorDetail = await response.text();
+        } catch {}
+      }
+
       if (response.status === 401 || response.status === 403) {
-        return { success: false, error: 'Authentication failed: Invalid Anon Key', latencyMs };
+        const detailPart = errorDetail ? ` (${errorDetail})` : '';
+        return {
+          success: false,
+          error: `Authentication failed: Invalid Anon Key${detailPart}. Please ensure you copy the 'anon' 'public' key (starts with eyJhbGci...) from Supabase Project Settings -> API, not the service_role key.`,
+          latencyMs,
+        };
       }
 
       return {
         success: false,
-        error: `Supabase returned HTTP ${response.status}: ${response.statusText}`,
+        error: `Supabase returned HTTP ${response.status}: ${errorDetail || response.statusText}`,
         latencyMs,
       };
     } catch (err) {
