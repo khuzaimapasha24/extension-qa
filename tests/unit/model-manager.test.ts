@@ -136,4 +136,29 @@ describe('ModelManager', () => {
     expect(manager.getStatus().status).toBe('NOT_LOADED');
     expect(mockEngine.unload).toHaveBeenCalled();
   });
+
+  it('configures indexeddb cacheBackend when loading models', async () => {
+    vi.spyOn(manager, 'checkHardware').mockResolvedValue({
+      supported: true,
+      tier: 'LIGHT_WEBGPU',
+      recommendedModelId: 'SmolLM2-360M-Instruct-q4f32_1-MLC',
+      notes: 'OK',
+    });
+
+    await manager.loadModel('SmolLM2-360M-Instruct-q4f32_1-MLC');
+    expect(mockEngineFactory).toHaveBeenCalledWith(
+      'SmolLM2-360M-Instruct-q4f32_1-MLC',
+      expect.objectContaining({
+        appConfig: expect.objectContaining({
+          cacheBackend: 'indexeddb',
+        }),
+      })
+    );
+  });
+
+  it('clearCache successfully executes without throwing', async () => {
+    const success = await manager.clearCache();
+    expect(success).toBe(true);
+    expect(manager.getStatus().status).toBe('NOT_LOADED');
+  });
 });

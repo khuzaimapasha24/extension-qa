@@ -1,12 +1,10 @@
 /**
- * Standalone WebGPU & Cache Runtime Guard for Chrome Extensions on Windows.
+ * Standalone WebGPU Runtime Guard for Chrome Extensions on Windows.
  * Runs synchronously before any bundled modules or WebAssembly libraries load.
  *
  * 1. Suppresses Chromium bug crbug.com/369219127 by sanitizing `powerPreference`
  *    before passing options to Dawn C++ backend.
- * 2. Hardens `Cache.prototype.add` and `Cache.prototype.put` by buffering responses
- *    into in-memory Blobs before storing into CacheStorage, preventing network stream breaks.
- * 3. Filters harmless Windows driver warnings and third-party adblocker check errors.
+ * 2. Filters harmless Windows driver warnings and third-party adblocker check errors.
  */
 (function () {
   'use strict';
@@ -88,67 +86,6 @@
           return;
         }
         return origErr.apply(console, arguments);
-      };
-    }
-  } catch (e) {}
-
-  // 4. Harden CacheStorage add() and put()
-  try {
-    if (typeof Cache !== 'undefined' && Cache.prototype) {
-      var origCachePut = Cache.prototype.put;
-      var origCacheAdd = Cache.prototype.add;
-
-      // Wrap Cache.prototype.put: If live network streaming into cache fails, buffer into Blob
-      Cache.prototype.put = async function (request, response) {
-        try {
-          return await origCachePut.call(this, request, response);
-        } catch (putErr) {
-          if (response && typeof response.blob === 'function') {
-            try {
-              var blob = await response.blob();
-              var safeResponse = new Response(blob, {
-                status: response.status,
-                statusText: response.statusText,
-                headers: response.headers,
-              });
-              return await origCachePut.call(this, request, safeResponse);
-            } catch (inner) {
-              throw putErr;
-            }
-          }
-          throw putErr;
-        }
-      };
-
-      // Wrap Cache.prototype.add: Download to Blob in memory with retries before calling put
-      Cache.prototype.add = async function (request) {
-        var lastError = null;
-
-        for (var attempt = 0; attempt < 3; attempt++) {
-          try {
-            var fetchTarget = request instanceof Request ? request.clone() : (request && request.url) ? request.url : String(request);
-            var response = await fetch(fetchTarget);
-            if (!response.ok) {
-              throw new Error('HTTP ' + response.status + ' ' + response.statusText);
-            }
-            // Fully buffer the body into memory as a Blob to prevent mid-stream network dropouts
-            var blob = await response.blob();
-            var cachedResponse = new Response(blob, {
-              status: response.status,
-              statusText: response.statusText,
-              headers: response.headers,
-            });
-            await origCachePut.call(this, request, cachedResponse);
-            return;
-          } catch (err) {
-            lastError = err;
-            if (attempt < 2) {
-              await new Promise(function (resolve) { setTimeout(resolve, 1000 * (attempt + 1)); });
-            }
-          }
-        }
-
-        throw lastError || new Error('Failed to download model shard');
       };
     }
   } catch (e) {}

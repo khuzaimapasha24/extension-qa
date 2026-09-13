@@ -1,11 +1,9 @@
 /**
- * WebGPU & Cache Runtime Guard for Chrome Extensions on Windows.
+ * WebGPU Runtime Guard for Chrome Extensions on Windows.
  *
  * 1. Suppresses Chromium bug https://crbug.com/369219127 by sanitizing `powerPreference`
  *    before passing options to Dawn C++ backend.
- * 2. Hardens `Cache.prototype.add` and `Cache.prototype.put` by buffering responses into
- *    in-memory Blobs before saving to CacheStorage, preventing streaming network breaks.
- * 3. Filters harmless Windows driver warnings and adblocker check errors.
+ * 2. Filters harmless Windows driver warnings and third-party adblocker check errors.
  */
 
 export function sanitizeGpuOptions<T>(options?: T): T | undefined {
@@ -96,64 +94,6 @@ export function initWebGpuGuard(): void {
         }
         originalError.apply(console, args);
       };
-    }
-  }
-
-  // 3. Harden CacheStorage add() and put()
-  if (typeof window !== 'undefined' && typeof window.Cache !== 'undefined' && window.Cache.prototype) {
-    try {
-      const nativeCachePut = window.Cache.prototype.put;
-
-      window.Cache.prototype.put = async function (request: RequestInfo | URL, response: Response): Promise<void> {
-        try {
-          return await nativeCachePut.call(this, request, response);
-        } catch (putErr) {
-          if (response && typeof response.blob === 'function') {
-            try {
-              const blob = await response.blob();
-              const safeResponse = new Response(blob, {
-                status: response.status,
-                statusText: response.statusText,
-                headers: response.headers,
-              });
-              return await nativeCachePut.call(this, request, safeResponse);
-            } catch {
-              throw putErr;
-            }
-          }
-          throw putErr;
-        }
-      };
-
-      window.Cache.prototype.add = async function (request: RequestInfo | URL): Promise<void> {
-        let lastErr: unknown;
-
-        for (let i = 0; i < 3; i++) {
-          try {
-            const fetchTarget = request instanceof Request ? request.clone() : (request as Request).url || String(request);
-            const res = await fetch(fetchTarget);
-            if (!res.ok) {
-              throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-            }
-            const blob = await res.blob();
-            const safeResponse = new Response(blob, {
-              status: res.status,
-              statusText: res.statusText,
-              headers: res.headers,
-            });
-            await nativeCachePut.call(this, request, safeResponse);
-            return;
-          } catch (err) {
-            lastErr = err;
-            if (i < 2) {
-              await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
-            }
-          }
-        }
-        throw lastErr || new Error('Failed to cache model shard');
-      };
-    } catch {
-      // Non-fatal if Cache prototype is restricted
     }
   }
 }

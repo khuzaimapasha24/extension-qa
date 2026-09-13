@@ -22,7 +22,7 @@ import {
   Database,
 } from 'lucide-react';
 import { modelManager, ModelManagerStatus } from '../../ai/model-manager';
-import { DEFAULT_LIGHT_MODEL, DEFAULT_COMPAT_MODEL, DEFAULT_FULL_MODEL, F16_FAST_MODEL } from '../../ai/webgpu-detector';
+import { DEFAULT_COMPAT_MODEL, DEFAULT_FULL_MODEL, F16_FAST_MODEL } from '../../ai/webgpu-detector';
 import { DEFAULT_AI_CONFIG, DEFAULT_ADVANCED_CONFIG } from '../../shared/constants/defaults';
 import { sendToBackground } from '../../shared/messaging/bus';
 import { supabaseClient } from '../../cloud/supabase-client';

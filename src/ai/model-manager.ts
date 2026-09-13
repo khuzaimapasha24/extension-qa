@@ -1,8 +1,24 @@
-import { CreateMLCEngine, MLCEngineInterface, InitProgressReport } from '@mlc-ai/web-llm';
-import { webgpuDetector, WebGPUReport, DEFAULT_LIGHT_MODEL, DEFAULT_COMPAT_MODEL } from './webgpu-detector';
+import {
+  CreateMLCEngine,
+  MLCEngineInterface,
+  InitProgressReport,
+  prebuiltAppConfig,
+  AppConfig,
+} from '@mlc-ai/web-llm';
+import { webgpuDetector, WebGPUReport, DEFAULT_COMPAT_MODEL } from './webgpu-detector';
 import { createLogger } from '../shared/logger/logger';
 
 const logger = createLogger('ModelManager');
+
+/**
+ * Configure WebLLM to use IndexedDB storage backend in Chrome Extensions.
+ * In Chrome extensions, CacheStorage has cross-origin and header validation limitations
+ * for multi-hundred megabyte model shards; IndexedDB provides reliable persistence.
+ */
+export const EXTENSION_APP_CONFIG: AppConfig = {
+  ...prebuiltAppConfig,
+  cacheBackend: 'indexeddb',
+};
 
 export type ModelStatus = 'NOT_LOADED' | 'DOWNLOADING' | 'READY' | 'ERROR';
 
@@ -63,6 +79,7 @@ export class ModelManager {
 
     this.loadPromise = (async () => {
       let initProgressCallback: ((report: InitProgressReport) => void) | undefined;
+      let targetModelId = '';
       try {
         const hw = await this.checkHardware();
         if (!hw.supported) {
@@ -80,7 +97,7 @@ export class ModelManager {
         }
 
         // Proactively route model selection if device does not support shader-f16
-        let targetModelId = requestedModel;
+        targetModelId = requestedModel;
         if (hw.hasShaderF16 !== true && targetModelId.includes('f16')) {
           logger.info(`WebGPU device lacks shader-f16 extension. Proactively switching from ${targetModelId} to ${DEFAULT_COMPAT_MODEL}.`);
           targetModelId = DEFAULT_COMPAT_MODEL;
@@ -97,7 +114,7 @@ export class ModelManager {
         this.progressText = `Preparing ${targetModelId}...`;
         this.lastError = undefined;
 
-        logger.info(`Starting load for model: ${targetModelId}`);
+        logger.info(`Starting load for model: ${targetModelId} with indexeddb storage backend`);
 
         initProgressCallback = (report: InitProgressReport) => {
           const pct = Math.round(report.progress * 100);
@@ -110,6 +127,7 @@ export class ModelManager {
         };
 
         this.engine = await this.engineFactory(targetModelId, {
+          appConfig: EXTENSION_APP_CONFIG,
           initProgressCallback,
         });
 
@@ -120,25 +138,24 @@ export class ModelManager {
         return true;
       } catch (err) {
         const primaryError = err instanceof Error ? err.message : String(err);
+        logger.error(`Model load error for ${targetModelId}:`, err);
 
-        // If error was related to Cache or Network, clean partial cache to avoid corrupt state
-        if (primaryError.includes('Cache') || primaryError.includes('network') || primaryError.includes('fetch')) {
-          logger.warn('Cache or network error detected during model download. Cleaning partial cache entries...');
+        // If error was related to Cache, IndexedDB, or Network, clean partial cache to avoid corrupt state
+        if (
+          primaryError.includes('Cache') ||
+          primaryError.includes('IndexedDB') ||
+          primaryError.includes('network') ||
+          primaryError.includes('fetch')
+        ) {
+          logger.warn('Storage or network error detected during model download. Cleaning partial cache entries...');
           try {
-            if (typeof caches !== 'undefined') {
-              const keys = await caches.keys();
-              for (const key of keys) {
-                if (key.includes('webllm') || key.includes('mlc')) {
-                  await caches.delete(key);
-                }
-              }
-            }
+            await this.clearCache();
           } catch (cErr) {
             logger.debug('Error clearing caches after failure', cErr);
           }
         }
 
-        // Automatic fallback to universal compatibility model if initial attempt failed
+        // Automatic fallback to universal compatibility model if initial attempt failed on a non-compat model
         if (
           this.currentModelId !== DEFAULT_COMPAT_MODEL &&
           ((this.currentModelId || '').includes('SmolLM2') ||
@@ -151,6 +168,7 @@ export class ModelManager {
             this.progressText = `Switching to universal model ${DEFAULT_COMPAT_MODEL}...`;
             this.currentModelId = DEFAULT_COMPAT_MODEL;
             this.engine = await this.engineFactory(DEFAULT_COMPAT_MODEL, {
+              appConfig: EXTENSION_APP_CONFIG,
               initProgressCallback,
             });
             this.status = 'READY';
@@ -173,7 +191,9 @@ export class ModelManager {
           primaryError.includes('fetch') ||
           primaryError.includes('Failed to fetch')
         ) {
-          friendlyError = 'Network connection interrupted while downloading model shards from Hugging Face. Please ensure an active internet connection, or click "Clear Cache & Retry".';
+          friendlyError = `Network connection interrupted while downloading model shards: ${primaryError}. Please ensure an active internet connection or click "Clear Cache & Retry".`;
+        } else if (primaryError.includes('quota') || primaryError.includes('Storage')) {
+          friendlyError = `Storage quota exceeded: ${primaryError}. Free up disk space and click "Clear Cache & Retry".`;
         }
         this.lastError = friendlyError;
         this.engine = null;
@@ -234,28 +254,57 @@ export class ModelManager {
   }
 
   /**
-   * Clears WebGPU model cache from CacheStorage if supported.
+   * Clears WebGPU model cache from both IndexedDB and CacheStorage.
    */
   public async clearCache(): Promise<boolean> {
     await this.unloadModel();
 
+    let success = true;
+
+    // 1. Delete WebLLM IndexedDB databases
+    if (typeof indexedDB !== 'undefined') {
+      const dbNames = ['webllm/model', 'webllm/wasm', 'webllm/config', 'tvmjs'];
+      for (const dbName of dbNames) {
+        try {
+          indexedDB.deleteDatabase(dbName);
+          logger.info(`Deleted IndexedDB database: ${dbName}`);
+        } catch (e) {
+          logger.debug(`Could not delete IndexedDB ${dbName}`, e);
+        }
+      }
+
+      if (typeof indexedDB.databases === 'function') {
+        try {
+          const dbs = await indexedDB.databases();
+          for (const db of dbs) {
+            if (db.name && (db.name.includes('webllm') || db.name.includes('mlc') || db.name.includes('tvm'))) {
+              indexedDB.deleteDatabase(db.name);
+              logger.info(`Deleted dynamic IndexedDB database: ${db.name}`);
+            }
+          }
+        } catch (dErr) {
+          logger.debug('Error querying indexedDB.databases()', dErr);
+        }
+      }
+    }
+
+    // 2. Clear CacheStorage entries if present
     if (typeof caches !== 'undefined') {
       try {
         const keys = await caches.keys();
         for (const key of keys) {
-          if (key.includes('webllm') || key.includes('mlc')) {
+          if (key.includes('webllm') || key.includes('mlc') || key.includes('tvm')) {
             await caches.delete(key);
             logger.info(`Deleted cache storage: ${key}`);
           }
         }
-        return true;
       } catch (err) {
         logger.warn('Failed to clear CacheStorage', err);
-        return false;
+        success = false;
       }
     }
 
-    return true;
+    return success;
   }
 }
 
